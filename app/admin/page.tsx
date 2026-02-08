@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { supabase } from '../../utils/supabase';
+import { supabase } from '../utils/supabase'; // 修正1: 正しい住所に直しました
 import * as XLSX from 'xlsx';
 import { useRouter } from 'next/navigation';
 
@@ -14,6 +14,7 @@ export default function AdminPage() {
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      // studentaさんだけを通す
       if (user && user.email === 'studenta@example.com') {
         setIsAdmin(true);
       } else {
@@ -39,11 +40,13 @@ export default function AdminPage() {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
+        
+        // 修正2: 「どんなデータでもOKだよ」という印(any[])をつけました
+        const data: any[] = XLSX.utils.sheet_to_json(ws);
 
         setStatus(`${data.length}件のデータを確認。登録を開始します...`);
 
-        for (const row: any of data) {
+        for (const row of data) {
           // A. イベント登録
           const { data: eventData, error: eventError } = await supabase
             .from('events')
