@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase'; // 修正1: 正しい住所に直しました
+import { supabase } from '../utils/supabase';
 import * as XLSX from 'xlsx';
 import { useRouter } from 'next/navigation';
 
@@ -14,7 +14,6 @@ export default function AdminPage() {
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      // studentaさんだけを通す
       if (user && user.email === 'studenta@example.com') {
         setIsAdmin(true);
       } else {
@@ -26,7 +25,7 @@ export default function AdminPage() {
     checkUser();
   }, [router]);
 
-  // 2. Excelアップロード処理
+  // 2. Excelアップロード処理（修正版）
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -41,10 +40,11 @@ export default function AdminPage() {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         
-        // 修正2: 「どんなデータでもOKだよ」という印(any[])をつけました
-        const data: any[] = XLSX.utils.sheet_to_json(ws);
+        // 【修正1】raw: false を追加して、見た目通りの文字として読み込む！
+        const data: any[] = XLSX.utils.sheet_to_json(ws, { raw: false });
 
         setStatus(`${data.length}件のデータを確認。登録を開始します...`);
+        console.log("読み込んだデータ:", data); // 確認用
 
         for (const row of data) {
           // A. イベント登録
@@ -74,9 +74,10 @@ export default function AdminPage() {
         setStatus('✅ 登録完了しました！');
         alert('登録成功！');
 
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        setStatus('❌ エラー：Excelの形式を確認してください');
+        // 【修正2】本当のエラー原因を画面に表示する
+        setStatus(`❌ エラー詳細: ${error.message || JSON.stringify(error)}`);
       }
     };
     reader.readAsBinaryString(file);
@@ -102,7 +103,7 @@ export default function AdminPage() {
         />
 
         {status && (
-          <div className="mt-4 p-3 bg-blue-50 text-blue-800 rounded">
+          <div className={`mt-4 p-3 rounded ${status.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>
             {status}
           </div>
         )}
