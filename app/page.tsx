@@ -1,59 +1,110 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from './utils/supabase';
-import { useRouter } from 'next/navigation';
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+export default function Home() {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  // データ読み込み
+  useEffect(() => {
+    const fetchEvents = async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('date', { ascending: true });
 
-    if (error) {
-      alert('ログインに失敗しました: ' + error.message);
+      if (error) console.error('エラー:', error);
+      else setEvents(data || []);
+      setLoading(false);
+    };
+
+    fetchEvents();
+  }, []);
+
+  // 🎨 色分けのルールを決める関数
+  const getEventStyle = (title: string) => {
+    if (title.includes('日本文化')) {
+      return 'bg-pink-50 border-pink-200 text-pink-900'; // 文化体験
+    } else if (title.includes('日本語')) {
+      return 'bg-blue-50 border-blue-200 text-blue-900'; // 日本語講座
     } else {
-      router.push('/dashboard'); // ログイン成功したらスケジュール画面へ
+      return 'bg-green-50 border-green-200 text-green-900'; // その他（ランチ、引率など）
     }
-    setLoading(false);
   };
 
+  // 📅 Googleカレンダーのリンクを作る関数
+  const createCalendarLink = (event: any) => {
+    // 日時をGoogleカレンダー用の形式(YYYYMMDDTHHmmSS)に変換
+    const dateStr = event.date.replace(/-/g, ''); // 2026-02-14 -> 20260214
+    const timeStr = event.meeting_time.replace(':', '') + '00'; // 13:00 -> 130000
+    const startDateTime = `${dateStr}T${timeStr}`;
+    // 終了時間はとりあえず1時間後にしておく（計算が複雑になるため）
+    const endDateTime = `${dateStr}T${parseInt(timeStr) + 10000}`; 
+
+    const url = new URL('https://www.google.com/calendar/render');
+    url.searchParams.append('action', 'TEMPLATE');
+    url.searchParams.append('text', event.title);
+    url.searchParams.append('dates', `${startDateTime}/${endDateTime}`);
+    url.searchParams.append('location', event.meeting_place || '');
+    
+    return url.toString();
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500">読み込み中...</div>;
+
   return (
-    <div style={{ padding: '50px', maxWidth: '400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1>学生バディ ログイン</h1>
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <input
-          type="email"
-          placeholder="メールアドレス"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ padding: '10px', fontSize: '16px' }}
-          required
-        />
-        <input
-          type="password"
-          placeholder="パスワード"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ padding: '10px', fontSize: '16px' }}
-          required
-        />
-        <button 
-          type="submit" 
-          disabled={loading}
-          style={{ padding: '10px', fontSize: '16px', backgroundColor: '#0070f3', color: 'white', border: 'none', cursor: 'pointer' }}
-        >
-          {loading ? 'ログイン中...' : 'ログイン'}
-        </button>
-      </form>
+    <div className="min-h-screen bg-gray-50 pb-10">
+      {/* ヘッダー */}
+      <header className="bg-white shadow-sm p-4 sticky top-0 z-10">
+        <h1 className="text-xl font-bold text-center text-gray-800">
+          Buddy Schedule 2026
+        </h1>
+      </header>
+
+      <main className="max-w-md mx-auto p-4 space-y-4">
+        {events.length === 0 ? (
+          <p className="text-center text-gray-500 mt-10">予定はまだありません</p>
+        ) : (
+          events.map((event) => (
+            <div 
+              key={event.id} 
+              className={`p-5 rounded-xl border shadow-sm ${getEventStyle(event.title)} transition-all`}
+            >
+              {/* 日付と時間 */}
+              <div className="flex justify-between items-end mb-2 border-b border-black/10 pb-2">
+                <span className="text-lg font-bold">
+                  {new Date(event.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' })}
+                </span>
+                <span className="text-xl font-bold font-mono">
+                  {event.meeting_time.slice(0, 5)}
+                </span>
+              </div>
+
+              {/* イベント名 */}
+              <h2 className="text-xl font-bold mb-3 leading-tight">
+                {event.title}
+              </h2>
+
+              {/* 集合場所 */}
+              <div className="flex items-center text-sm font-medium mb-4 opacity-80">
+                <span className="mr-2">📍 集合:</span>
+                <span>{event.meeting_place}</span>
+              </div>
+
+              {/* カレンダー登録ボタン */}
+              <a 
+                href={createCalendarLink(event)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-xs bg-white/60 hover:bg-white/90 px-3 py-2 rounded-lg border border-black/5 transition-colors text-black/70 font-bold"
+              >
+                📅 カレンダーに追加
+              </a>
+            </div>
+          ))
+        )}
+      </main>
     </div>
   );
 }
