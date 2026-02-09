@@ -15,34 +15,74 @@ export default function Home() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
 
-  useEffect(() => {
-    const fetchMyEvents = async () => {
-      const { data: news } = await supabase.from('news').select('*').order('created_at', { ascending: false });
-      setNewsList(news || []);
+  // データ取得関数
+  const fetchMyEvents = async () => {
+    // 1. お知らせ
+    const { data: news } = await supabase.from('news').select('*').order('created_at', { ascending: false });
+    setNewsList(news || []);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !user.email) {
-        setLoading(false);
-        return;
-      }
-      setUserEmail(user.email);
-
-      const { data: myAssignments } = await supabase
-        .from('assignments').select('event_id').eq('student_email', user.email);
-
-      if (!myAssignments || myAssignments.length === 0) {
-        setLoading(false);
-        return;
-      }
-      const eventIds = myAssignments.map((a: any) => a.event_id);
-      const { data: myEvents } = await supabase
-        .from('events').select('*').in('id', eventIds).order('date', { ascending: true });
-
-      setEvents(myEvents || []);
+    // 2. ユーザー情報
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !user.email) {
       setLoading(false);
-    };
+      return;
+    }
+    setUserEmail(user.email);
+
+    // 3. 自分の割り当て（ステータス付き）を取得
+    const { data: myAssignments } = await supabase
+      .from('assignments')
+      .select('event_id, status') // ★ statusも一緒に取る
+      .eq('student_email', user.email);
+
+    if (!myAssignments || myAssignments.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    // 4. イベント詳細を取得
+    const eventIds = myAssignments.map((a: any) => a.event_id);
+    const { data: myEvents } = await supabase
+      .from('events')
+      .select('*')
+      .in('id', eventIds)
+      .order('date', { ascending: true });
+
+    // ★ イベント情報に「出欠ステータス」を合体させる
+    const mergedEvents = (myEvents || []).map(event => {
+      const assignment = myAssignments.find(a => a.event_id === event.id);
+      return { ...event, status: assignment?.status || '未登録' };
+    });
+
+    setEvents(mergedEvents);
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchMyEvents();
   }, []);
+
+  // ★ 出欠更新機能
+  const handleStatusUpdate = async (eventId: number, newStatus: string) => {
+    if(!confirm(`${newStatus}として登録しますか？`)) return;
+
+    // データベースを更新
+    const { error } = await supabase
+      .from('assignments')
+      .update({ status: newStatus })
+      .eq('event_id', eventId)
+      .eq('student_email', userEmail);
+
+    if (error) {
+      alert('更新に失敗しました');
+      console.error(error);
+    } else {
+      // 画面の表示も即座に更新
+      setEvents(prev => prev.map(e => 
+        e.id === eventId ? { ...e, status: newStatus } : e
+      ));
+    }
+  };
 
   const getEventColor = (title: string) => {
     if (title.includes('日本文化')) return { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-900', dot: 'bg-pink-500' };
@@ -75,17 +115,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
+      
+      {/* バナー */}
       <div className="relative w-full h-48 md:h-64 bg-gray-800 overflow-hidden shadow-md">
-        <img 
-          src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&q=80&w=1200" 
-          alt="Kyoto Banner" 
-          className="w-full h-full object-cover opacity-60"
-        />
+        <img src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&q=80&w=1200" alt="Kyoto Banner" className="w-full h-full object-cover opacity-60"/>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white drop-shadow-md text-center px-4">
           <h1 className="text-3xl md:text-5xl font-bold tracking-wider mb-2">Buddy Schedule</h1>
-          <p className="text-lg md:text-2xl font-bold opacity-90 mt-2">
-            留学サポートデスク/短期留学生受入プログラム
-          </p>
+          <p className="text-lg md:text-2xl font-bold opacity-90 mt-2">留学サポートデスク/短期留学生受入プログラム</p>
         </div>
         {userEmail ? (
           <div className="absolute top-4 right-4 flex items-center gap-3">
@@ -98,6 +134,7 @@ export default function Home() {
       </div>
 
       <div className="max-w-5xl mx-auto p-4 md:p-8">
+        {/* お知らせ */}
         {newsList.length > 0 && (
           <div className="mb-8 bg-white border-l-4 border-orange-400 p-4 rounded shadow-sm">
             <h3 className="text-sm font-bold text-gray-500 mb-2">📢 事務局からのお知らせ</h3>
@@ -113,6 +150,7 @@ export default function Home() {
         )}
 
         <div className="flex flex-col md:flex-row gap-8">
+          {/* カレンダー */}
           {userEmail && (
             <aside className="w-full md:w-80 flex-shrink-0">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sticky top-4">
@@ -143,6 +181,7 @@ export default function Home() {
             </aside>
           )}
 
+          {/* イベントリスト（★出欠ボタン追加） */}
           <main className="flex-1">
             <h3 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">📅 今後の予定リスト</h3>
             {!userEmail ? (
@@ -158,23 +197,53 @@ export default function Home() {
               <div className="space-y-4">
                 {events.map((event) => {
                   const styles = getEventColor(event.title);
+                  // 出欠に応じたバッジの色
+                  const statusColor = event.status === '出席' ? 'bg-green-100 text-green-700 border-green-200' 
+                                    : event.status === '欠席' ? 'bg-red-100 text-red-700 border-red-200' 
+                                    : 'bg-gray-100 text-gray-600 border-gray-200';
+
                   return (
                     <div key={event.id} className={`p-5 rounded-xl border shadow-sm ${styles.bg} ${styles.border} ${styles.text} transition-all hover:translate-x-1`}>
-                      <div className="flex justify-between items-end mb-2 border-b border-black/5 pb-2">
-                        <span className="text-lg font-bold">{new Date(event.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' })}</span>
-                        <span className="text-xl font-bold font-mono">{event.meeting_time.slice(0, 5)}</span>
+                      <div className="flex justify-between items-start mb-2 border-b border-black/5 pb-2">
+                        <div>
+                          <div className="text-lg font-bold">{new Date(event.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' })}</div>
+                          <div className="text-xl font-bold font-mono">{event.meeting_time.slice(0, 5)}</div>
+                        </div>
+                        {/* 出欠ステータス表示 */}
+                        <div className={`px-3 py-1 rounded-full border text-xs font-bold ${statusColor}`}>
+                          {event.status === '未登録' ? '未登録' : event.status}
+                        </div>
                       </div>
+                      
                       {event.program_name && (
                         <span className="inline-block bg-white/80 border border-black/10 text-xs font-bold px-2 py-1 rounded mb-2 text-gray-600">{event.program_name}</span>
                       )}
                       <h2 className="text-xl font-bold mb-3 leading-tight">{event.title}</h2>
+                      
                       <div className="flex items-center text-sm font-medium mb-4 opacity-80">
                         <span className="mr-2">📍 集合:</span>
                         <span>{event.meeting_place}</span>
                       </div>
-                      <a href={createCalendarLink(event)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-xs bg-white/60 hover:bg-white/90 px-3 py-2 rounded-lg border border-black/5 transition-colors text-black/70 font-bold">
-                        📅 カレンダーに追加
-                      </a>
+
+                      {/* アクションボタンエリア */}
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-black/5">
+                        <button 
+                          onClick={() => handleStatusUpdate(event.id, '出席')}
+                          className={`flex-1 py-2 px-3 rounded text-sm font-bold transition ${event.status === '出席' ? 'bg-green-600 text-white shadow-inner' : 'bg-white border border-green-200 text-green-700 hover:bg-green-50'}`}
+                        >
+                          出席する 🙆‍♀️
+                        </button>
+                        <button 
+                          onClick={() => handleStatusUpdate(event.id, '欠席')}
+                          className={`flex-1 py-2 px-3 rounded text-sm font-bold transition ${event.status === '欠席' ? 'bg-red-500 text-white shadow-inner' : 'bg-white border border-red-200 text-red-600 hover:bg-red-50'}`}
+                        >
+                          欠席する 🙅‍♂️
+                        </button>
+                        
+                        <a href={createCalendarLink(event)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center text-xs bg-white/60 hover:bg-white/90 px-3 py-2 rounded border border-black/5 transition-colors text-black/70 font-bold">
+                          📅 カレンダー
+                        </a>
+                      </div>
                     </div>
                   );
                 })}
