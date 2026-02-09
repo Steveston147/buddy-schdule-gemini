@@ -11,7 +11,6 @@ export default function AdminPage() {
   const [events, setEvents] = useState<any[]>([]); 
   const router = useRouter();
 
-  // 1. データ読み込み
   const fetchEvents = useCallback(async () => {
     const { data, error } = await supabase
       .from('events')
@@ -22,11 +21,10 @@ export default function AdminPage() {
     else setEvents(data || []);
   }, []);
 
-  // 2. 管理者チェック
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-
+      // ↓ ご自身のアドレスとテスト用アドレスを許可
       if (user && (user.email === 'studenta@example.com' || user.email === 'eltontanaka@gmail.com')) {
         setIsAdmin(true);
         fetchEvents(); 
@@ -39,10 +37,8 @@ export default function AdminPage() {
     checkUser();
   }, [router, fetchEvents]);
 
-  // 3. 削除機能
   const handleDelete = async (id: number, title: string) => {
-    if (!confirm(`本当に「${title}」を削除しますか？\n（この操作は取り消せません）`)) return;
-
+    if (!confirm(`本当に「${title}」を削除しますか？`)) return;
     try {
       const { error } = await supabase.from('events').delete().eq('id', id);
       if (error) throw error;
@@ -54,7 +50,15 @@ export default function AdminPage() {
     }
   };
 
-  // 4. Excelアップロード処理（ここを修正しました！）
+  // ★ここが進化したポイント！柔軟にデータを読み取る関数
+  const getColumnValue = (row: any, targetKey: string) => {
+    // 1. そのまま探す
+    if (row[targetKey] !== undefined) return row[targetKey];
+    // 2. 空白を無視して探す（"メールアドレス " も " メールアドレス" もOKにする）
+    const foundKey = Object.keys(row).find(k => k.trim() === targetKey);
+    return foundKey ? row[foundKey] : undefined;
+  };
+
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -72,34 +76,55 @@ export default function AdminPage() {
 
         setStatus(`${data.length}件のデータを確認。登録を開始します...`);
 
+        let eventCount = 0;
+        let assignCount = 0;
+
         for (const row of data) {
-          // A. イベント登録（プログラム名を追加！）
+          // ★柔軟な読み取り関数を使う
+          const title = getColumnValue(row, 'イベント名');
+          const date = getColumnValue(row, '日付');
+          const time = getColumnValue(row, '集合時間');
+          const place = getColumnValue(row, '集合場所');
+          const program = getColumnValue(row, 'プログラム名');
+          const email = getColumnValue(row, 'メールアドレス');
+
+          if (!title || !date) continue; // 必須項目がなければスキップ
+
+          // A. イベント登録
           const { data: eventData, error: eventError } = await supabase
             .from('events')
             .upsert({ 
-              title: row['イベント名'], 
-              date: row['日付'],
-              meeting_time: row['集合時間'],
-              meeting_place: row['集合場所'],
-              program_name: row['プログラム名'] // ← 新規追加
+              title: title, 
+              date: date,
+              meeting_time: time,
+              meeting_place: place,
+              program_name: program
             }, { onConflict: 'title, date' })
             .select()
             .single();
 
           if (eventError) throw eventError;
+          eventCount++;
 
-          // B. 割り当て登録
-          if (eventData && row['メールアドレス']) {
+          // B. 割り当て登録（メールアドレスがあれば）
+          if (eventData && email) {
+            // メールの前後の空白もついでに掃除しておく
+            const cleanEmail = String(email).trim();
+            
             await supabase
               .from('assignments')
               .insert({
-                student_email: row['メールアドレス'],
+                student_email: cleanEmail,
                 event_id: eventData.id
               });
+            assignCount++;
           }
         }
-        setStatus('✅ 登録完了しました！');
-        alert('登録成功！');
+        
+        // ★結果を詳細に表示
+        setStatus(`✅ 完了！ イベント登録: ${eventCount}件 / 学生への割り当て: ${assignCount}件`);
+        alert(`登録成功！\nイベント: ${eventCount}件\n学生への割り当て: ${assignCount}件`);
+        
         fetchEvents(); 
         e.target.value = '';
 
@@ -123,10 +148,10 @@ export default function AdminPage() {
             Excel形式: イベント名, 日付, 集合時間, プログラム名, 集合場所, メールアドレス
           </p>
           <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-          {status && <div className={`mt-4 p-3 rounded ${status.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>{status}</div>}
+          {/* ステータス表示エリア */}
+          {status && <div className={`mt-4 p-3 rounded font-bold ${status.includes('❌') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'}`}>{status}</div>}
         </div>
         
-        {/* リスト表示 */}
         <div className="bg-white p-8 rounded shadow">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">登録済みイベント一覧</h2>
