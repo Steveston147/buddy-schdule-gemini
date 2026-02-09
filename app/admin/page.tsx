@@ -10,19 +10,16 @@ export default function AdminPage() {
   const [status, setStatus] = useState('');
   const [events, setEvents] = useState<any[]>([]); 
   const [assignments, setAssignments] = useState<any[]>([]);
-  const [newsList, setNewsList] = useState<any[]>([]); // お知らせリスト
-  const [newsContent, setNewsContent] = useState(''); // 投稿内容
+  const [newsList, setNewsList] = useState<any[]>([]); 
+  const [newsContent, setNewsContent] = useState(''); 
   const [debugRows, setDebugRows] = useState<any[]>([]);
   const router = useRouter();
 
   const fetchAllData = useCallback(async () => {
-    // イベント
     const { data: ev } = await supabase.from('events').select('*').order('date');
     setEvents(ev || []);
-    // 割り当て
     const { data: asg } = await supabase.from('assignments').select('*, events(title, date)').order('id', { ascending: false });
     setAssignments(asg || []);
-    // お知らせ（新しい順）
     const { data: news } = await supabase.from('news').select('*').order('created_at', { ascending: false });
     setNewsList(news || []);
   }, []);
@@ -47,7 +44,6 @@ export default function AdminPage() {
     router.push('/login');
   };
 
-  // お知らせ投稿
   const handleAddNews = async (e: any) => {
     e.preventDefault();
     if (!newsContent.trim()) return;
@@ -59,7 +55,6 @@ export default function AdminPage() {
     }
   };
 
-  // お知らせ削除
   const handleDeleteNews = async (id: number) => {
     if (!confirm('このお知らせを削除しますか？')) return;
     await supabase.from('news').delete().eq('id', id);
@@ -136,14 +131,10 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* ヘッダー＆ログアウト */}
         <div className="flex justify-between items-center bg-white p-4 rounded shadow">
           <h1 className="text-xl font-bold text-gray-800">事務局管理画面</h1>
           <button onClick={handleLogout} className="text-sm bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">ログアウト</button>
         </div>
-
-        {/* 📢 お知らせ投稿エリア（新機能） */}
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-400">
           <h2 className="text-lg font-bold text-gray-800 mb-4">📢 お知らせ・緊急連絡の投稿</h2>
           <form onSubmit={handleAddNews} className="flex gap-4">
@@ -156,8 +147,6 @@ export default function AdminPage() {
             />
             <button type="submit" className="bg-orange-500 text-white px-6 py-2 rounded font-bold hover:bg-orange-600">投稿</button>
           </form>
-          
-          {/* 投稿済みリスト */}
           <div className="mt-4 space-y-2">
             {newsList.map((news) => (
               <div key={news.id} className="flex justify-between items-center bg-orange-50 p-3 rounded">
@@ -171,15 +160,11 @@ export default function AdminPage() {
             {newsList.length === 0 && <p className="text-xs text-gray-400">現在のお知らせはありません</p>}
           </div>
         </div>
-
-        {/* Excelアップロード */}
         <div className="bg-white p-6 rounded-lg shadow border border-blue-100">
           <h2 className="text-lg font-bold text-gray-800 mb-2">① データ登録（Excel）</h2>
           <input type="file" accept=".xlsx" onChange={handleFileUpload} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
           {status && <p className="mt-2 font-bold text-blue-600">{status}</p>}
         </div>
-
-        {/* 割り当てリストなど（既存機能） */}
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">登録済みイベント一覧</h2>
