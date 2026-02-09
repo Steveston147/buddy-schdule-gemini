@@ -25,8 +25,8 @@ export default function AdminPage() {
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // ↓ ここをご自身のアドレスに修正しました
+
+      // ↓ 田中さんのアドレス(eltontanaka)と、事務局用(studenta)の両方を許可
       if (user && (user.email === 'studenta@example.com' || user.email === 'eltontanaka@gmail.com')) {
         setIsAdmin(true);
         fetchEvents(); // 管理者ならリストも読み込む
@@ -34,10 +34,6 @@ export default function AdminPage() {
         alert('管理者権限がありません');
         router.push('/');
       }
-      setLoading(false);
-    };
-    checkUser();
-  }, [router, fetchEvents]);
       setLoading(false);
     };
     checkUser();
