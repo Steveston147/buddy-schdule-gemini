@@ -9,27 +9,26 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [events, setEvents] = useState<any[]>([]); 
-  const [assignments, setAssignments] = useState<any[]>([]); // 割り当てリスト
-  const [debugRows, setDebugRows] = useState<any[]>([]); // Excelの中身チェック用
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [debugRows, setDebugRows] = useState<any[]>([]);
   const router = useRouter();
 
   // イベントと割り当ての両方を読み込む
   const fetchAllData = useCallback(async () => {
-    // イベント
     const { data: ev } = await supabase.from('events').select('*').order('date');
     setEvents(ev || []);
 
-    // 割り当て（イベント情報もくっつけて取得）
     const { data: asg } = await supabase
       .from('assignments')
       .select('*, events(title, date)')
-      .order('id', { ascending: false }); // 新しい順
+      .order('id', { ascending: false });
     setAssignments(asg || []);
   }, []);
 
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      // ↓ ご自身のアドレスとテスト用アドレスを許可
       if (user && (user.email === 'studenta@example.com' || user.email === 'eltontanaka@gmail.com')) {
         setIsAdmin(true);
         fetchAllData(); 
@@ -42,6 +41,12 @@ export default function AdminPage() {
     checkUser();
   }, [router, fetchAllData]);
 
+  // ★追加機能：ログアウト処理
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login'); // ログイン画面へ戻る
+  };
+
   const handleDeleteEvent = async (id: number) => {
     if (!confirm('本当に削除しますか？')) return;
     await supabase.from('events').delete().eq('id', id);
@@ -50,16 +55,14 @@ export default function AdminPage() {
 
   const handleResetAll = async () => {
     if (!confirm('【危険】全てのイベントと割り当てデータを削除しますか？\nこの操作は戻せません！')) return;
-    await supabase.from('assignments').delete().neq('id', 0); // 全削除
-    await supabase.from('events').delete().neq('id', 0); // 全削除
+    await supabase.from('assignments').delete().neq('id', 0);
+    await supabase.from('events').delete().neq('id', 0);
     alert('初期化しました');
     fetchAllData();
   };
 
-  // 柔軟な列名取得（スペース除去対応）
   const getColumnValue = (row: any, targetKey: string) => {
     if (row[targetKey] !== undefined) return row[targetKey];
-    // キーに含まれるスペースを消して比較する
     const foundKey = Object.keys(row).find(k => k.replace(/\s+/g, '') === targetKey);
     return foundKey ? row[foundKey] : undefined;
   };
@@ -74,9 +77,8 @@ export default function AdminPage() {
       try {
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: any[] = XLSX.utils.sheet_to_json(ws, { raw: false }); // 文字列として読む
+        const data: any[] = XLSX.utils.sheet_to_json(ws, { raw: false });
 
-        // ★デバッグ用に最初の3行を表示
         setDebugRows(data.slice(0, 3));
 
         let evCount = 0;
@@ -101,7 +103,7 @@ export default function AdminPage() {
               meeting_time: time, 
               meeting_place: place,
               program_name: program
-            }, { onConflict: 'title, date' }) // タイトルと日付が同じなら更新扱い
+            }, { onConflict: 'title, date' })
             .select()
             .single();
 
@@ -110,8 +112,7 @@ export default function AdminPage() {
 
           // 2. 割り当て登録
           if (eventData && email) {
-            const cleanEmail = String(email).trim(); // メールの前後のゴミを取る
-            
+            const cleanEmail = String(email).trim();
             const { error: asError } = await supabase
               .from('assignments')
               .insert({ student_email: cleanEmail, event_id: eventData.id });
@@ -121,7 +122,7 @@ export default function AdminPage() {
         }
 
         setStatus(`完了！ イベント:${evCount}件 / 割り当て:${asCount}件`);
-        alert(`登録結果\nイベント登録数: ${evCount}\n学生への割り当て数: ${asCount}\n\n※もし割り当てが0件なら、下の「Excel読み取り診断」を見てください`);
+        alert(`登録結果\nイベント登録数: ${evCount}\n学生への割り当て数: ${asCount}`);
         fetchAllData();
         e.target.value = '';
 
@@ -133,7 +134,7 @@ export default function AdminPage() {
     reader.readAsBinaryString(file);
   };
 
-  if (loading) return <div>Checking...</div>;
+  if (loading) return <div className="p-8">確認中...</div>;
   if (!isAdmin) return null;
 
   return (
@@ -142,8 +143,17 @@ export default function AdminPage() {
         
         {/* アップロードエリア */}
         <div className="bg-white p-6 rounded-lg shadow border border-blue-100">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">① データ登録（診断モード）</h1>
-          <p className="text-sm text-gray-500 mb-4">アップロードすると、下に「どう読み込まれたか」が表示されます。</p>
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold text-gray-800">① データ登録（事務局用）</h1>
+            {/* ログアウトボタン */}
+            <button 
+              onClick={handleLogout} 
+              className="text-sm bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition"
+            >
+              ログアウト
+            </button>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">Excelファイルをアップロードしてください。</p>
           <input type="file" accept=".xlsx" onChange={handleFileUpload} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
           {status && <p className="mt-2 font-bold text-blue-600">{status}</p>}
         </div>
@@ -151,15 +161,15 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* デバッグ表示エリア */}
           <div className="bg-gray-800 text-white p-4 rounded-lg shadow overflow-auto h-64">
-             <h2 className="font-bold border-b border-gray-600 pb-2 mb-2">🔍 Excel読み取り診断（最初の3行）</h2>
+             <h2 className="font-bold border-b border-gray-600 pb-2 mb-2">🔍 Excel読み取り診断</h2>
              <pre className="text-xs font-mono whitespace-pre-wrap">
-               {debugRows.length > 0 ? JSON.stringify(debugRows, null, 2) : 'ここに読み込んだデータの中身が表示されます'}
+               {debugRows.length > 0 ? JSON.stringify(debugRows, null, 2) : 'ここにデータの中身が表示されます'}
              </pre>
           </div>
 
           {/* 割り当てリスト表示エリア */}
           <div className="bg-white p-4 rounded-lg shadow overflow-auto h-64 border border-green-100">
-            <h2 className="font-bold text-green-800 border-b pb-2 mb-2">📊 現在の割り当てリスト（DBの中身）</h2>
+            <h2 className="font-bold text-green-800 border-b pb-2 mb-2">📊 現在の割り当てリスト</h2>
             {assignments.length === 0 ? <p className="text-gray-400 text-sm">データなし</p> : (
               <table className="w-full text-xs text-left">
                 <thead><tr className="text-gray-500"><th>Email</th><th>イベント名</th><th>日付</th></tr></thead>
