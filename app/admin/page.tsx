@@ -11,7 +11,7 @@ export default function AdminPage() {
   const [events, setEvents] = useState<any[]>([]); // 登録済みデータ表示用
   const router = useRouter();
 
-  // 1. 管理者チェック & データ読み込み
+  // 1. データ読み込み（イベント一覧）
   const fetchEvents = useCallback(async () => {
     const { data, error } = await supabase
       .from('events')
@@ -22,11 +22,12 @@ export default function AdminPage() {
     else setEvents(data || []);
   }, []);
 
+  // 2. 管理者チェック（ログイン確認）
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // ↓ 田中さんのアドレス(eltontanaka)と、事務局用(studenta)の両方を許可
+      // ↓ 田中さんのアドレスと、事務局用アドレスの両方を許可
       if (user && (user.email === 'studenta@example.com' || user.email === 'eltontanaka@gmail.com')) {
         setIsAdmin(true);
         fetchEvents(); // 管理者ならリストも読み込む
@@ -39,7 +40,7 @@ export default function AdminPage() {
     checkUser();
   }, [router, fetchEvents]);
 
-  // 2. 削除機能
+  // 3. 削除機能
   const handleDelete = async (id: number, title: string) => {
     if (!confirm(`本当に「${title}」を削除しますか？\n（この操作は取り消せません）`)) return;
 
@@ -59,7 +60,7 @@ export default function AdminPage() {
     }
   };
 
-  // 3. Excelアップロード処理
+  // 4. Excelアップロード処理
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -106,9 +107,9 @@ export default function AdminPage() {
         }
         setStatus('✅ 登録完了しました！');
         alert('登録成功！');
-        fetchEvents(); // リストを更新して、登録結果をすぐ確認できるようにする
+        fetchEvents(); // リストを更新
         
-        // ファイル入力をリセット（同じファイルを連続で選べるように）
+        // ファイル入力をリセット
         e.target.value = '';
 
       } catch (error: any) {
