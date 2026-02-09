@@ -22,24 +22,22 @@ export default function Home() {
     fetchEvents();
   }, []);
 
-  // 🎨 色分けのルールを決める関数
+  // 🎨 色分けのルール
   const getEventStyle = (title: string) => {
     if (title.includes('日本文化')) {
       return 'bg-pink-50 border-pink-200 text-pink-900'; // 文化体験
     } else if (title.includes('日本語')) {
       return 'bg-blue-50 border-blue-200 text-blue-900'; // 日本語講座
     } else {
-      return 'bg-green-50 border-green-200 text-green-900'; // その他（ランチ、引率など）
+      return 'bg-green-50 border-green-200 text-green-900'; // その他
     }
   };
 
-  // 📅 Googleカレンダーのリンクを作る関数
+  // 📅 Googleカレンダー用リンク作成
   const createCalendarLink = (event: any) => {
-    // 日時をGoogleカレンダー用の形式(YYYYMMDDTHHmmSS)に変換
-    const dateStr = event.date.replace(/-/g, ''); // 2026-02-14 -> 20260214
-    const timeStr = event.meeting_time.replace(':', '') + '00'; // 13:00 -> 130000
+    const dateStr = event.date.replace(/-/g, '');
+    const timeStr = event.meeting_time.replace(':', '') + '00';
     const startDateTime = `${dateStr}T${timeStr}`;
-    // 終了時間はとりあえず1時間後にしておく（計算が複雑になるため）
     const endDateTime = `${dateStr}T${parseInt(timeStr) + 10000}`; 
 
     const url = new URL('https://www.google.com/calendar/render');
@@ -71,7 +69,6 @@ export default function Home() {
               key={event.id} 
               className={`p-5 rounded-xl border shadow-sm ${getEventStyle(event.title)} transition-all`}
             >
-              {/* 日付と時間 */}
               <div className="flex justify-between items-end mb-2 border-b border-black/10 pb-2">
                 <span className="text-lg font-bold">
                   {new Date(event.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' })}
@@ -81,18 +78,15 @@ export default function Home() {
                 </span>
               </div>
 
-              {/* イベント名 */}
               <h2 className="text-xl font-bold mb-3 leading-tight">
                 {event.title}
               </h2>
 
-              {/* 集合場所 */}
               <div className="flex items-center text-sm font-medium mb-4 opacity-80">
                 <span className="mr-2">📍 集合:</span>
                 <span>{event.meeting_place}</span>
               </div>
 
-              {/* カレンダー登録ボタン */}
               <a 
                 href={createCalendarLink(event)}
                 target="_blank"
@@ -105,6 +99,14 @@ export default function Home() {
           ))
         )}
       </main>
+
+      {/* 管理者ログインへのリンク（ここに追加済み） */}
+      <footer className="py-8 text-center">
+        <a href="/login" className="text-xs text-gray-400 hover:text-gray-600 underline">
+          管理者ログイン
+        </a>
+      </footer>
+
     </div>
   );
 }
