@@ -1,23 +1,23 @@
 // FILE: app/page.tsx
 // PATH: /app/page.tsx
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { supabase } from './utils/supabase';
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "./utils/supabase";
 
 const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 
 function pad2(n: number) {
-  return String(n).padStart(2, '0');
+  return String(n).padStart(2, "0");
 }
 
 function icsEscape(s: string) {
   return s
-    .replace(/\\/g, '\\\\')
-    .replace(/\r\n|\n|\r/g, '\\n')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;');
+    .replace(/\\/g, "\\\\")
+    .replace(/\r\n|\n|\r/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
 }
 
 function parseHHMM(t: string) {
@@ -31,11 +31,11 @@ function toIcsUtcStamp(dt: Date) {
     dt.getUTCFullYear() +
     pad2(dt.getUTCMonth() + 1) +
     pad2(dt.getUTCDate()) +
-    'T' +
+    "T" +
     pad2(dt.getUTCHours()) +
     pad2(dt.getUTCMinutes()) +
     pad2(dt.getUTCSeconds()) +
-    'Z'
+    "Z"
   );
 }
 
@@ -57,145 +57,23 @@ function addMinutesToHHMM(time: string, minutes: number) {
 }
 
 function toGoogleDates(ymd: string, hhmm: string) {
-  const d = ymd.replace(/-/g, '');
-  const t = hhmm.replace(':', '') + '00';
+  const d = ymd.replace(/-/g, "");
+  const t = hhmm.replace(":", "") + "00";
   return `${d}T${t}`;
 }
 
 function fmtTimeRange(start: string, end: string) {
-  const s = (start || '').slice(0, 5);
-  const e = (end || '').slice(0, 5);
-  if (s && e) return `${s}–${e}`;
+  const s = (start || "").slice(0, 5);
+  const e = (end || "").slice(0, 5);
+  if (s && e) return `${s}〜${e}`;
   if (s) return s;
-  return '';
-}
-
-function toYmd(y: number, m: number, d: number) {
-  return `${y}-${pad2(m + 1)}-${pad2(d)}`;
-}
-
-function weekdayLabel(i: number) {
-  return ['日', '月', '火', '水', '木', '金', '土'][i];
-}
-
-// ---------------------------
-// 3か月カレンダー（詳細表示）
-// ---------------------------
-function MonthCalendarDetailed({
-  year,
-  month,
-  eventsByDate,
-  showDetails,
-}: {
-  year: number;
-  month: number; // 0-11
-  eventsByDate: Map<string, any[]>;
-  showDetails: boolean;
-}) {
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getFirstDayOfMonth(year, month);
-
-  const cells: Array<{ day: number | null; ymd?: string }> = [];
-  for (let i = 0; i < firstDay; i++) cells.push({ day: null });
-  for (let d = 1; d <= daysInMonth; d++) {
-    const ymd = toYmd(year, month, d);
-    cells.push({ day: d, ymd });
-  }
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-        <div className="font-bold text-gray-800">
-          {year}年 {month + 1}月
-        </div>
-        <div className="text-xs text-gray-500">今月から先3か月</div>
-      </div>
-
-      <div className="grid grid-cols-7 text-center text-xs text-gray-400 px-3 pt-3">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div
-            key={i}
-            className={`py-1 ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : ''}`}
-          >
-            {weekdayLabel(i)}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-2 px-3 pb-4 pt-2">
-        {cells.map((c, idx) => {
-          if (!c.day) return <div key={idx} className="h-24 md:h-28" />;
-
-          const ymd = c.ymd!;
-          const dayEvents = eventsByDate.get(ymd) || [];
-
-          // 1日あたりの表示件数（多い日は省略表示）
-          const MAX = 3;
-          const visible = dayEvents.slice(0, MAX);
-          const hiddenCount = Math.max(0, dayEvents.length - MAX);
-
-          return (
-            <div
-              key={idx}
-              className="h-24 md:h-28 rounded-lg border border-gray-100 bg-white hover:bg-gray-50 transition overflow-hidden"
-            >
-              <div className="px-2 pt-2 flex items-start justify-between">
-                <div className="text-sm font-bold text-gray-800">{c.day}</div>
-                {dayEvents.length > 0 && (
-                  <div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                    {dayEvents.length}
-                  </div>
-                )}
-              </div>
-
-              <div className="px-2 pb-2 mt-1 space-y-1">
-                {!showDetails ? (
-                  <div className="text-[11px] text-gray-400">
-                    ログインすると予定が表示されます
-                  </div>
-                ) : dayEvents.length === 0 ? (
-                  <div className="text-[11px] text-gray-300">—</div>
-                ) : (
-                  <>
-                    {visible.map((ev: any) => {
-                      const pg = (ev.program_name || '').toString().trim();
-                      const title = (ev.title || '').toString().trim();
-                      const start = (ev.meeting_time || '').toString();
-                      const end = (ev.end_time || '').toString();
-                      const time = fmtTimeRange(start, end) || (start ? start.slice(0, 5) : '');
-
-                      return (
-                        <div key={ev.id} className="text-[11px] leading-tight">
-                          <div className="flex items-center gap-1">
-                            {pg && (
-                              <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
-                                {pg}
-                              </span>
-                            )}
-                            {time && <span className="text-[10px] font-mono text-gray-600">{time}</span>}
-                          </div>
-                          <div className="truncate text-gray-800">{title}</div>
-                        </div>
-                      );
-                    })}
-                    {hiddenCount > 0 && (
-                      <div className="text-[10px] text-gray-400">+ {hiddenCount} 件</div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return "-";
 }
 
 export default function Home() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState('');
+  const [userEmail, setUserEmail] = useState("");
   const [newsList, setNewsList] = useState<any[]>([]);
   const [icsMsg, setIcsMsg] = useState<string | null>(null);
 
@@ -207,7 +85,7 @@ export default function Home() {
     setLoading(true);
 
     // お知らせ
-    const { data: news } = await supabase.from('news').select('*').order('created_at', { ascending: false });
+    const { data: news } = await supabase.from("news").select("*").order("created_at", { ascending: false });
     setNewsList(news || []);
 
     // user
@@ -216,18 +94,18 @@ export default function Home() {
     } = await supabase.auth.getUser();
 
     if (!user?.email) {
-      setUserEmail('');
+      setUserEmail("");
       setEvents([]);
       setLoading(false);
       return;
     }
     setUserEmail(user.email);
 
-    // 自分の割り当て
+    // assignments
     const { data: myAssignments } = await supabase
-      .from('assignments')
-      .select('event_id, status, absence_reason')
-      .eq('student_email', user.email);
+      .from("assignments")
+      .select("event_id, status, absence_reason")
+      .eq("student_email", user.email);
 
     if (!myAssignments || myAssignments.length === 0) {
       setEvents([]);
@@ -237,15 +115,15 @@ export default function Home() {
 
     const eventIds = myAssignments.map((a: any) => a.event_id);
 
-    // events は * を取る（end_time も含む）
-    const { data: myEvents } = await supabase.from('events').select('*').in('id', eventIds).order('date', { ascending: true });
+    // events（end_time含む）
+    const { data: myEvents } = await supabase.from("events").select("*").in("id", eventIds).order("date", { ascending: true });
 
     const mergedEvents = (myEvents || []).map((event) => {
       const assignment = myAssignments.find((a: any) => a.event_id === event.id);
       return {
         ...event,
-        status: assignment?.status || '未登録',
-        absence_reason: assignment?.absence_reason || '',
+        status: assignment?.status || "未登録",
+        absence_reason: assignment?.absence_reason || "",
       };
     });
 
@@ -261,92 +139,88 @@ export default function Home() {
   const sortedEvents = useMemo(() => {
     const copy = [...events];
     copy.sort((a, b) => {
-      const ad = String(a?.date || '');
-      const bd = String(b?.date || '');
+      const ad = String(a?.date || "");
+      const bd = String(b?.date || "");
       if (ad !== bd) return ad.localeCompare(bd);
-      const at = String(a?.meeting_time || '');
-      const bt = String(b?.meeting_time || '');
+      const at = String(a?.meeting_time || "");
+      const bt = String(b?.meeting_time || "");
       return at.localeCompare(bt);
     });
     return copy;
   }, [events]);
 
-  const eventsByDate = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const ev of sortedEvents) {
-      const key = String(ev.date || '');
-      if (!key) continue;
-      if (!m.has(key)) m.set(key, []);
-      m.get(key)!.push(ev);
-    }
-    // 同日の並び替え（時間順）
-    for (const [k, arr] of m.entries()) {
-      arr.sort((a: any, b: any) => String(a?.meeting_time || '').localeCompare(String(b?.meeting_time || '')));
-      m.set(k, arr);
-    }
-    return m;
-  }, [sortedEvents]);
+  // カレンダーの点色
+  const getEventColor = (title: string) => {
+    const t = title || "";
+    if (t.includes("日本文化")) return { dot: "bg-pink-500", bg: "bg-pink-50", border: "border-pink-200", text: "text-pink-900" };
+    if (t.includes("日本語")) return { dot: "bg-blue-500", bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-900" };
+    return { dot: "bg-green-500", bg: "bg-green-50", border: "border-green-200", text: "text-green-900" };
+  };
+
+  const changeStartMonth = (offset: number) => {
+    const moved = shiftYearMonth(startYear, startMonth, offset);
+    setStartYear(moved.year);
+    setStartMonth(moved.month);
+  };
 
   const monthsToShow = useMemo(() => {
-    // 「今月〜先3か月」固定（ここを変えるなら startYear/startMonth を操作する）
-    const base = { year: today.getFullYear(), month: today.getMonth() };
-    return [0, 1, 2].map((off) => shiftYearMonth(base.year, base.month, off));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return [0, 1, 2].map((off) => shiftYearMonth(startYear, startMonth, off));
+  }, [startYear, startMonth]);
 
-  // 出欠更新（既存）
+  // 出欠更新
   const handleStatusUpdate = async (eventId: number, newStatus: string) => {
     let reason: string | null = null;
 
-    if (newStatus === '欠席') {
-      const inputReason = prompt('欠席理由を入力してください。\n（例：体調不良のため、授業のため）');
+    if (newStatus === "欠席") {
+      const inputReason = prompt("欠席理由を入力してください。\n（例：体調不良のため、授業のため）");
       if (inputReason === null) return;
-      if (inputReason.trim() === '') {
-        alert('欠席理由は必須です。');
+      if (inputReason.trim() === "") {
+        alert("欠席理由は必須です。");
         return;
       }
       reason = inputReason.trim();
-    } else if (newStatus === '出席') {
-      if (!confirm('会場に到着しましたか？\n「出席」として登録します。')) return;
+    } else if (newStatus === "出席") {
+      if (!confirm("会場に到着しましたか？\n「出席」として登録します。")) return;
     }
 
     const updateData: any = { status: newStatus };
     if (reason !== null) updateData.absence_reason = reason;
 
     const { error } = await supabase
-      .from('assignments')
+      .from("assignments")
       .update(updateData)
-      .eq('event_id', eventId)
-      .eq('student_email', userEmail);
+      .eq("event_id", eventId)
+      .eq("student_email", userEmail);
 
     if (error) {
-      alert('更新に失敗しました');
+      alert("更新に失敗しました");
       return;
     }
 
     setEvents((prev) =>
-      prev.map((e) => (e.id === eventId ? { ...e, status: newStatus, absence_reason: reason ?? e.absence_reason } : e))
+      prev.map((e) =>
+        e.id === eventId ? { ...e, status: newStatus, absence_reason: reason !== null ? reason : e.absence_reason } : e
+      )
     );
   };
 
   // 1件Googleカレンダーへ
   const createCalendarLink = (event: any) => {
-    const title = encodeURIComponent(event.title || 'Buddy Schedule');
-    const place = encodeURIComponent(event.meeting_place || '');
-    const ymd = String(event.date || '');
-    const start = String(event.meeting_time || '').slice(0, 5);
-    const end = String(event.end_time || '').slice(0, 5);
+    const title = encodeURIComponent(event.title || "Buddy Schedule");
+    const place = encodeURIComponent(event.meeting_place || "");
+    const ymd = String(event.date || "");
+    const start = String(event.meeting_time || "").slice(0, 5);
+    const end = String(event.end_time || "").slice(0, 5);
 
-    if (!ymd || !start) return 'https://calendar.google.com';
+    if (!ymd || !start) return "https://calendar.google.com";
 
     const startStr = toGoogleDates(ymd, start);
-    let endStr = '';
+    let endStr = "";
     if (end) endStr = toGoogleDates(ymd, end);
     else {
       const tmp = addMinutesToHHMM(start, 60);
       endStr = toGoogleDates(ymd, tmp || start);
     }
-
     return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&location=${place}&ctz=Asia%2FTokyo`;
   };
 
@@ -355,11 +229,11 @@ export default function Home() {
     setIcsMsg(null);
 
     if (!userEmail) {
-      setIcsMsg('ユーザー情報が取得できません。再ログインしてください。');
+      setIcsMsg("ユーザー情報が取得できません。再ログインしてください。");
       return;
     }
     if (!sortedEvents.length) {
-      setIcsMsg('予定がありません。');
+      setIcsMsg("予定がありません。");
       return;
     }
 
@@ -368,28 +242,28 @@ export default function Home() {
     const dtstamp = toIcsUtcStamp(now);
 
     const lines: string[] = [];
-    lines.push('BEGIN:VCALENDAR');
-    lines.push('VERSION:2.0');
-    lines.push('PRODID:-//Buddy Schedule//JP');
-    lines.push('CALSCALE:GREGORIAN');
-    lines.push('METHOD:PUBLISH');
-    lines.push(`X-WR-CALNAME:${icsEscape('Buddy Schedule')}`);
+    lines.push("BEGIN:VCALENDAR");
+    lines.push("VERSION:2.0");
+    lines.push("PRODID:-//Buddy Schedule//JP");
+    lines.push("CALSCALE:GREGORIAN");
+    lines.push("METHOD:PUBLISH");
+    lines.push(`X-WR-CALNAME:${icsEscape("Buddy Schedule")}`);
 
     for (const ev of sortedEvents) {
       if (!ev?.title || !ev?.date) continue;
 
       const title = String(ev.title);
       const date = String(ev.date);
-      const startTime = String(ev.meeting_time || '').trim();
-      const endTime = String(ev.end_time || '').trim();
-      const place = String(ev.meeting_place || '').trim();
-      const program = String(ev.program_name || '').trim();
-      const status = String(ev.status || '').trim();
-      const reason = String(ev.absence_reason || '').trim();
+      const startTime = String(ev.meeting_time || "").trim();
+      const endTime = String(ev.end_time || "").trim();
+      const place = String(ev.meeting_place || "").trim();
+      const program = String(ev.program_name || "").trim();
+      const status = String(ev.status || "").trim();
+      const reason = String(ev.absence_reason || "").trim();
 
       const uid = `${userEmail}-${ev.id}@buddy-schedule`;
 
-      lines.push('BEGIN:VEVENT');
+      lines.push("BEGIN:VEVENT");
       lines.push(`UID:${icsEscape(uid)}`);
       lines.push(`DTSTAMP:${dtstamp}`);
 
@@ -398,14 +272,14 @@ export default function Home() {
 
       if (!startHHMM) {
         // 終日
-        const [y, m, d] = date.split('-').map((x: string) => parseInt(x, 10));
+        const [y, m, d] = date.split("-").map((x: string) => parseInt(x, 10));
         const ymd = `${y}${pad2(m)}${pad2(d)}`;
         lines.push(`DTSTART;VALUE=DATE:${ymd}`);
-
         const next = new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0));
         lines.push(`DTEND;VALUE=DATE:${next.getUTCFullYear()}${pad2(next.getUTCMonth() + 1)}${pad2(next.getUTCDate())}`);
       } else {
-        const [y, m, d] = date.split('-').map((x: string) => parseInt(x, 10));
+        // JST→UTC
+        const [y, m, d] = date.split("-").map((x: string) => parseInt(x, 10));
         const startUtc = new Date(Date.UTC(y, m - 1, d, startHHMM.hh - 9, startHHMM.mm, 0));
 
         let endUtc: Date;
@@ -425,8 +299,7 @@ export default function Home() {
       if (place) lines.push(`LOCATION:${icsEscape(place)}`);
 
       const desc: string[] = [];
-      desc.push(`Program: ${program || '-'}`);
-      desc.push(`Title: ${title}`);
+      if (program) desc.push(`Program: ${program}`);
       desc.push(`Date: ${date}`);
       if (startTime) desc.push(`Start: ${startTime} (JST)`);
       if (endTime) desc.push(`End: ${endTime} (JST)`);
@@ -434,34 +307,30 @@ export default function Home() {
       if (place) desc.push(`Place: ${place}`);
       if (status) desc.push(`Status: ${status}`);
       if (reason) desc.push(`Reason: ${reason}`);
-      desc.push('Generated by Buddy Schedule');
-      lines.push(`DESCRIPTION:${icsEscape(desc.join('\n'))}`);
+      desc.push("Generated by Buddy Schedule");
+      lines.push(`DESCRIPTION:${icsEscape(desc.join("\n"))}`);
 
-      lines.push('END:VEVENT');
+      lines.push("END:VEVENT");
     }
 
-    lines.push('END:VCALENDAR');
+    lines.push("END:VCALENDAR");
 
-    const icsText = lines.join('\r\n');
-    const blob = new Blob([icsText], { type: 'text/calendar;charset=utf-8' });
+    const icsText = lines.join("\r\n");
+    const blob = new Blob([icsText], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `buddy_schedule_${userEmail.replace(/[^a-zA-Z0-9._-]/g, '_')}.ics`;
+    a.download = `buddy_schedule_${userEmail.replace(/[^a-zA-Z0-9._-]/g, "_")}.ics`;
     document.body.appendChild(a);
     a.click();
     a.remove();
 
     setTimeout(() => URL.revokeObjectURL(url), 3000);
-    setIcsMsg('全予定の .ics をダウンロードしました（終了時刻も反映済み）。');
+    setIcsMsg("全予定の .ics をダウンロードしました（終了時刻も反映）。");
   };
 
-  const showDetails = !!userEmail;
-
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">読み込み中...</div>;
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">読み込み中...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
@@ -516,196 +385,234 @@ export default function Home() {
           </div>
         )}
 
-        {/* ★ 3か月カレンダー（詳細） */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-800">📆 今月から先3か月のカレンダー</h2>
-            {userEmail ? (
-              <button
-                onClick={downloadAllAsICS}
-                disabled={!sortedEvents.length}
-                className={`inline-flex items-center justify-center px-4 py-2 rounded-full border font-bold text-sm ${
-                  sortedEvents.length
-                    ? 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'
-                    : 'bg-gray-100 border-gray-200 text-gray-400'
-                }`}
-                title="アサインされている予定をすべて .ics にしてダウンロード（Google/Outlookで取り込み可）"
-              >
-                📥 全予定をICSでDL
-              </button>
-            ) : (
-              <a
-                href="/login"
-                className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm hover:bg-blue-700"
-              >
-                ログインして予定を表示
-              </a>
-            )}
-          </div>
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* ✅ ここが「一つ前に良かった」3か月カレンダー（点表示） */}
+          {userEmail && (
+            <aside className="w-full md:w-80 flex-shrink-0">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sticky top-4">
+                <div className="flex justify-between items-center mb-4">
+                  <button onClick={() => changeStartMonth(-1)} className="p-1 hover:bg-gray-100 rounded text-gray-500">
+                    ◀
+                  </button>
+                  <h2 className="text-base font-bold text-gray-800">
+                    3か月カレンダー（{monthsToShow[0].year}年{monthsToShow[0].month + 1}月〜{monthsToShow[2].year}年{monthsToShow[2].month + 1}月）
+                  </h2>
+                  <button onClick={() => changeStartMonth(1)} className="p-1 hover:bg-gray-100 rounded text-gray-500">
+                    ▶
+                  </button>
+                </div>
 
-          {icsMsg && (
-            <div className="mb-4 text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 p-3 rounded">{icsMsg}</div>
+                <div className="space-y-6">
+                  {monthsToShow.map((mObj, mi) => {
+                    const y = mObj.year;
+                    const m = mObj.month;
+
+                    const daysInMonth = getDaysInMonth(y, m);
+                    const firstDay = getFirstDayOfMonth(y, m);
+                    const days: (number | null)[] = [];
+                    for (let i = 0; i < firstDay; i++) days.push(null);
+                    for (let i = 1; i <= daysInMonth; i++) days.push(i);
+
+                    return (
+                      <div key={`${y}-${m}-${mi}`} className="border-t pt-4 first:border-t-0 first:pt-0">
+                        <div className="font-bold text-gray-800 mb-2">
+                          {y}年 {m + 1}月
+                        </div>
+
+                        <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-2">
+                          <span className="text-red-400">日</span>
+                          <span>月</span>
+                          <span>火</span>
+                          <span>水</span>
+                          <span>木</span>
+                          <span>金</span>
+                          <span className="text-blue-400">土</span>
+                        </div>
+
+                        <div className="grid grid-cols-7 gap-1 text-sm">
+                          {days.map((day, idx) => {
+                            if (!day) return <div key={idx} />;
+
+                            const dateString = `${y}-${pad2(m + 1)}-${pad2(day)}`;
+                            const dayEvents = sortedEvents.filter((e) => e.date === dateString);
+
+                            return (
+                              <div
+                                key={idx}
+                                className="h-10 flex flex-col items-center justify-center rounded hover:bg-gray-50 transition relative"
+                              >
+                                <span className={`${dayEvents.length > 0 ? "font-bold text-gray-800" : "text-gray-500"}`}>{day}</span>
+                                <div className="flex gap-0.5 mt-0.5">
+                                  {dayEvents.map((ev: any, i: number) => (
+                                    <div key={i} className={`w-1.5 h-1.5 rounded-full ${getEventColor(String(ev.title || "")).dot}`} />
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </aside>
           )}
 
-          <div className="space-y-6">
-            {monthsToShow.map((mObj, i) => (
-              <MonthCalendarDetailed
-                key={`${mObj.year}-${mObj.month}-${i}`}
-                year={mObj.year}
-                month={mObj.month}
-                eventsByDate={eventsByDate}
-                showDetails={showDetails}
-              />
-            ))}
-          </div>
+          {/* 予定リスト */}
+          <main className="flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <h3 className="text-xl font-bold text-gray-700 flex items-center gap-2">📅 今後の予定リスト</h3>
 
-          <div className="mt-3 text-xs text-gray-500">
-            表示内容：<span className="font-bold">プログラム名</span> / <span className="font-bold">開始〜終了</span> /{' '}
-            <span className="font-bold">内容（イベント名）</span>
-          </div>
-        </div>
-
-        {/* 予定リスト（既存） */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h3 className="text-xl font-bold text-gray-700 flex items-center gap-2">📅 今後の予定リスト</h3>
-        </div>
-
-        {!userEmail ? (
-          <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
-            <p className="mb-4 text-gray-600">スケジュールを確認するにはログインしてください。</p>
-            <a
-              href="/login"
-              className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 transition"
-            >
-              ログイン画面へ
-            </a>
-          </div>
-        ) : sortedEvents.length === 0 ? (
-          <div className="text-center py-10 bg-white rounded-xl shadow-sm">
-            <p className="text-gray-500 font-bold">予定はありません</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sortedEvents.map((event) => {
-              const title = String(event.title || '');
-              const styles =
-                title.includes('日本文化')
-                  ? { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-900' }
-                  : title.includes('日本語')
-                  ? { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' }
-                  : { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-900' };
-
-              const isAttended = event.status === '出席';
-              const isAbsent = event.status === '欠席';
-              const isConfirmed = event.status === '参加予定';
-
-              const start = String(event.meeting_time || '').slice(0, 5);
-              const end = String(event.end_time || '').slice(0, 5);
-              const timeLabel = start ? (end ? `${start}〜${end}` : start) : '-';
-
-              return (
-                <div
-                  key={event.id}
-                  className={`p-5 rounded-xl border shadow-sm ${styles.bg} ${styles.border} ${styles.text} transition-all hover:translate-x-1`}
+              {userEmail && (
+                <button
+                  onClick={downloadAllAsICS}
+                  disabled={!sortedEvents.length}
+                  className={`inline-flex items-center justify-center px-4 py-2 rounded-full border font-bold text-sm ${
+                    sortedEvents.length ? "bg-white hover:bg-gray-50 border-gray-200 text-gray-700" : "bg-gray-100 border-gray-200 text-gray-400"
+                  }`}
+                  title="アサインされている予定をすべて .ics にしてダウンロード（Google/Outlookで取り込み可）"
                 >
-                  <div className="flex justify-between items-start mb-2 border-b border-black/5 pb-2">
-                    <div>
-                      <div className="text-lg font-bold">
-                        {new Date(event.date).toLocaleDateString('ja-JP', {
-                          month: 'short',
-                          day: 'numeric',
-                          weekday: 'short',
-                        })}
-                      </div>
-                      <div className="text-xl font-bold font-mono">{timeLabel}</div>
-                    </div>
+                  📥 全予定をICSでDL
+                </button>
+              )}
+            </div>
 
-                    <div className={`px-3 py-1 rounded-full border text-xs font-bold bg-white`}>
-                      {isAttended ? '出席済み ✅' : isAbsent ? '欠席 🏠' : isConfirmed ? '参加予定 👍' : '未回答'}
-                    </div>
-                  </div>
+            {icsMsg && (
+              <div className="mb-4 text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 p-3 rounded">
+                {icsMsg}
+              </div>
+            )}
 
-                  {event.program_name && (
-                    <span className="inline-block bg-white/80 border border-black/10 text-xs font-bold px-2 py-1 rounded mb-2 text-gray-600">
-                      {event.program_name}
-                    </span>
-                  )}
+            {!userEmail ? (
+              <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+                <p className="mb-4 text-gray-600">スケジュールを確認するにはログインしてください。</p>
+                <a
+                  href="/login"
+                  className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 transition"
+                >
+                  ログイン画面へ
+                </a>
+              </div>
+            ) : sortedEvents.length === 0 ? (
+              <div className="text-center py-10 bg-white rounded-xl shadow-sm">
+                <p className="text-gray-500 font-bold">予定はありません</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {sortedEvents.map((event) => {
+                  const title = String(event.title || "");
+                  const styles = getEventColor(title);
 
-                  <h2 className="text-xl font-bold mb-3 leading-tight">{event.title}</h2>
+                  const isAttended = event.status === "出席";
+                  const isAbsent = event.status === "欠席";
+                  const isConfirmed = event.status === "参加予定";
 
-                  {isAbsent && event.absence_reason && (
-                    <div className="mb-4 bg-red-50 text-red-800 text-sm p-2 rounded border border-red-100">
-                      理由: {event.absence_reason}
-                    </div>
-                  )}
+                  const start = String(event.meeting_time || "").slice(0, 5);
+                  const end = String(event.end_time || "").slice(0, 5);
+                  const timeLabel = start ? fmtTimeRange(start, end) : "-";
 
-                  <div className="flex items-center text-sm font-medium mb-4 opacity-80">
-                    <span className="mr-2">📍 集合:</span>
-                    <span>{event.meeting_place || '-'}</span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-black/5">
-                    {!isAttended && !isAbsent && (
-                      <>
-                        {!isConfirmed && (
-                          <button
-                            onClick={() => handleStatusUpdate(event.id, '参加予定')}
-                            className="flex-1 py-2 px-3 rounded text-sm font-bold bg-blue-600 text-white shadow hover:bg-blue-700 transition"
-                          >
-                            参加予定（確認）👍
-                          </button>
-                        )}
-
-                        {isConfirmed && (
-                          <button
-                            onClick={() => handleStatusUpdate(event.id, '出席')}
-                            className="flex-1 py-2 px-3 rounded text-sm font-bold bg-green-600 text-white shadow hover:bg-green-700 transition animate-pulse"
-                          >
-                            出席チェックイン（当日）📍
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => handleStatusUpdate(event.id, '欠席')}
-                          className="py-2 px-3 rounded text-sm font-bold bg-white border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
-                        >
-                          欠席連絡
-                        </button>
-                      </>
-                    )}
-
-                    {isAttended && (
-                      <div className="flex-1 py-2 px-3 text-center text-sm font-bold text-green-700 bg-green-50 rounded">
-                        出席登録ありがとうございます！
-                      </div>
-                    )}
-
-                    {isAbsent && (
-                      <button
-                        onClick={() => handleStatusUpdate(event.id, '参加予定')}
-                        className="flex-1 py-2 px-3 text-center text-sm text-gray-400 underline hover:text-gray-600"
-                      >
-                        欠席を取り消す
-                      </button>
-                    )}
-
-                    <a
-                      href={createCalendarLink(event)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-auto inline-flex items-center text-xs bg-white/60 hover:bg-white/90 px-3 py-2 rounded border border-black/5 transition-colors text-black/70 font-bold"
-                      title="この1件だけGoogleカレンダーに追加"
+                  return (
+                    <div
+                      key={event.id}
+                      className={`p-5 rounded-xl border shadow-sm ${styles.bg} ${styles.border} ${styles.text} transition-all hover:translate-x-1`}
                     >
-                      📅 カレンダー
-                    </a>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                      <div className="flex justify-between items-start mb-2 border-b border-black/5 pb-2">
+                        <div>
+                          <div className="text-lg font-bold">
+                            {new Date(event.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" })}
+                          </div>
+                          <div className="text-xl font-bold font-mono">{timeLabel}</div>
+                        </div>
 
+                        <div className={`px-3 py-1 rounded-full border text-xs font-bold bg-white`}>
+                          {isAttended ? "出席済み ✅" : isAbsent ? "欠席 🏠" : isConfirmed ? "参加予定 👍" : "未回答"}
+                        </div>
+                      </div>
+
+                      {event.program_name && (
+                        <span className="inline-block bg-white/80 border border-black/10 text-xs font-bold px-2 py-1 rounded mb-2 text-gray-600">
+                          {event.program_name}
+                        </span>
+                      )}
+
+                      <h2 className="text-xl font-bold mb-3 leading-tight">{event.title}</h2>
+
+                      {isAbsent && event.absence_reason && (
+                        <div className="mb-4 bg-red-50 text-red-800 text-sm p-2 rounded border border-red-100">
+                          理由: {event.absence_reason}
+                        </div>
+                      )}
+
+                      <div className="flex items-center text-sm font-medium mb-4 opacity-80">
+                        <span className="mr-2">📍 集合:</span>
+                        <span>{event.meeting_place || "-"}</span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-black/5">
+                        {!isAttended && !isAbsent && (
+                          <>
+                            {!isConfirmed && (
+                              <button
+                                onClick={() => handleStatusUpdate(event.id, "参加予定")}
+                                className="flex-1 py-2 px-3 rounded text-sm font-bold bg-blue-600 text-white shadow hover:bg-blue-700 transition"
+                              >
+                                参加予定（確認）👍
+                              </button>
+                            )}
+
+                            {isConfirmed && (
+                              <button
+                                onClick={() => handleStatusUpdate(event.id, "出席")}
+                                className="flex-1 py-2 px-3 rounded text-sm font-bold bg-green-600 text-white shadow hover:bg-green-700 transition animate-pulse"
+                              >
+                                出席チェックイン（当日）📍
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleStatusUpdate(event.id, "欠席")}
+                              className="py-2 px-3 rounded text-sm font-bold bg-white border border-gray-300 text-gray-500 hover:bg-gray-100 transition"
+                            >
+                              欠席連絡
+                            </button>
+                          </>
+                        )}
+
+                        {isAttended && (
+                          <div className="flex-1 py-2 px-3 text-center text-sm font-bold text-green-700 bg-green-50 rounded">
+                            出席登録ありがとうございます！
+                          </div>
+                        )}
+
+                        {isAbsent && (
+                          <button
+                            onClick={() => handleStatusUpdate(event.id, "参加予定")}
+                            className="flex-1 py-2 px-3 text-center text-sm text-gray-400 underline hover:text-gray-600"
+                          >
+                            欠席を取り消す
+                          </button>
+                        )}
+
+                        <a
+                          href={createCalendarLink(event)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-auto inline-flex items-center text-xs bg-white/60 hover:bg-white/90 px-3 py-2 rounded border border-black/5 transition-colors text-black/70 font-bold"
+                          title="この1件だけGoogleカレンダーに追加"
+                        >
+                          📅 カレンダー
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
+fix
       <footer className="text-center py-8">
         <a href="/login" className="text-xs text-gray-400 hover:text-gray-600 underline">
           管理者ログイン
