@@ -1,37 +1,37 @@
 // FILE: app/admin/page.tsx
 // PATH: /app/admin/page.tsx
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../utils/supabase';
-import * as XLSX from 'xlsx';
-import { useRouter } from 'next/navigation';
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../utils/supabase";
+import * as XLSX from "xlsx";
+import { useRouter } from "next/navigation";
 
 export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('');
-  const [userStatus, setUserStatus] = useState(''); // ユーザー登録用ステータス
-  const [defaultPassword, setDefaultPassword] = useState('Welcome2026'); // 初期パスワード
+  const [status, setStatus] = useState("");
+  const [userStatus, setUserStatus] = useState("");
+  const [defaultPassword, setDefaultPassword] = useState("Welcome2026");
   const [events, setEvents] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [newsList, setNewsList] = useState<any[]>([]);
-  const [newsContent, setNewsContent] = useState('');
+  const [newsContent, setNewsContent] = useState("");
 
-  // モーダル用
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const router = useRouter();
 
   const fetchAllData = useCallback(async () => {
-    const { data: ev } = await supabase.from('events').select('*').order('date');
+    const { data: ev } = await supabase.from("events").select("*").order("date");
     setEvents(ev || []);
     const { data: asg } = await supabase
-      .from('assignments')
-      .select('*, events(title, date)')
-      .order('id', { ascending: false });
+      .from("assignments")
+      .select("*, events(title, date)")
+      .order("id", { ascending: false });
     setAssignments(asg || []);
-    const { data: news } = await supabase.from('news').select('*').order('created_at', { ascending: false });
+    const { data: news } = await supabase.from("news").select("*").order("created_at", { ascending: false });
     setNewsList(news || []);
   }, []);
 
@@ -40,13 +40,13 @@ export default function AdminPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      // 管理者チェック
-      if (user && (user.email === 'studenta@example.com' || user.email === 'eltontanaka@gmail.com')) {
+
+      if (user && (user.email === "studenta@example.com" || user.email === "eltontanaka@gmail.com")) {
         setIsAdmin(true);
         fetchAllData();
       } else {
-        alert('管理者権限がありません');
-        router.push('/');
+        alert("管理者権限がありません");
+        router.push("/");
       }
       setLoading(false);
     };
@@ -55,11 +55,11 @@ export default function AdminPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push("/login");
   };
 
   // ------------------------------------------------------------
-  // ★ NEW: テンプレートDL（XLSX生成）
+  // テンプレDL（XLSX生成）
   // ------------------------------------------------------------
   const downloadXlsxTemplate = (
     filename: string,
@@ -69,7 +69,7 @@ export default function AdminPage() {
   ) => {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     if (colWidths && colWidths.length) {
-      (ws as any)['!cols'] = colWidths.map((wch) => ({ wch }));
+      (ws as any)["!cols"] = colWidths.map((wch) => ({ wch }));
     }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -77,39 +77,27 @@ export default function AdminPage() {
   };
 
   const handleDownloadUserTemplate = () => {
-    const header = ['メールアドレス', '氏名'];
+    const header = ["メールアドレス", "氏名"];
     const sample = [
-      ['student1@example.com', '山田 太郎'],
-      ['student2@example.com', '佐藤 花子'],
+      ["student1@example.com", "山田 太郎"],
+      ["student2@example.com", "佐藤 花子"],
     ];
-    downloadXlsxTemplate(
-      'user_accounts_template.xlsx',
-      'users',
-      [header, ...sample],
-      [32, 18]
-    );
+    downloadXlsxTemplate("user_accounts_template.xlsx", "users", [header, ...sample], [32, 18]);
   };
 
+  // ★ ここで「終了時間」を追加
   const handleDownloadScheduleTemplate = () => {
-    const header = ['イベント名', '日付', '集合時間', '集合場所', 'プログラム名', 'メールアドレス'];
+    const header = ["イベント名", "日付", "集合時間", "終了時間", "集合場所", "プログラム名", "メールアドレス"];
     const sample = [
-      ['日本語講座', '2026-02-10', '09:00', 'OIC 〇〇教室', 'RSJP', 'student1@example.com'],
-      // 同じイベントに複数名を割り当てたい場合は「同じイベント名＋同じ日付」で行を増やします
-      ['日本語講座', '2026-02-10', '09:00', 'OIC 〇〇教室', 'RSJP', 'student2@example.com'],
-      ['日本文化体験', '2026-02-10', '13:00', '南門前', 'RSJP Exp', 'student1@example.com'],
+      ["日本語講座", "2026-02-10", "09:00", "10:30", "OIC 〇〇教室", "RSJP", "student1@example.com"],
+      ["日本語講座", "2026-02-10", "09:00", "10:30", "OIC 〇〇教室", "RSJP", "student2@example.com"],
+      ["日本文化体験", "2026-02-10", "13:00", "16:00", "南門前", "RSJP Exp", "student1@example.com"],
     ];
-    downloadXlsxTemplate(
-      'schedule_template.xlsx',
-      'schedule',
-      [header, ...sample],
-      [22, 14, 12, 22, 14, 32]
-    );
+    downloadXlsxTemplate("schedule_template.xlsx", "schedule", [header, ...sample], [22, 14, 10, 10, 22, 14, 32]);
   };
   // ------------------------------------------------------------
 
-  // ----------------------------------------------------------------
-  // ★ 既存：ユーザー一括登録（APIを呼び出す）
-  // ----------------------------------------------------------------
+  // ユーザー一括登録
   const handleUserUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -119,31 +107,30 @@ export default function AdminPage() {
         `初期パスワード「${defaultPassword}」でユーザーを一括登録しますか？\n（すでに登録済みの人はスキップされます）`
       )
     ) {
-      e.target.value = '';
+      e.target.value = "";
       return;
     }
 
-    setUserStatus('登録処理中...（時間がかかります）');
+    setUserStatus("登録処理中...（時間がかかります）");
 
     const reader = new FileReader();
     reader.onload = async (evt: any) => {
       try {
-        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        const wb = XLSX.read(evt.target.result, { type: "binary" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
 
-        // APIルートにデータを送信
-        const response = await fetch('/api/create-users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/create-users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ users: data, defaultPassword }),
         });
 
         const result = await response.json();
 
         if (response.ok) {
-          const successCount = result.results.filter((r: any) => r.status === 'Success').length;
-          const errorCount = result.results.filter((r: any) => r.status === 'Error').length;
+          const successCount = result.results.filter((r: any) => r.status === "Success").length;
+          const errorCount = result.results.filter((r: any) => r.status === "Error").length;
           setUserStatus(`完了！ 成功:${successCount} / エラー(済):${errorCount}`);
           alert(`登録完了\n成功: ${successCount}件\nエラー（登録済など）: ${errorCount}件`);
         } else {
@@ -152,40 +139,41 @@ export default function AdminPage() {
       } catch (error: any) {
         setUserStatus(`エラー: ${error.message}`);
       }
-      e.target.value = '';
+      e.target.value = "";
     };
     reader.readAsBinaryString(file);
   };
-  // ----------------------------------------------------------------
 
-  // 既存機能（お知らせ、イベント削除など）
+  // お知らせ
   const handleAddNews = async (e: any) => {
     e.preventDefault();
     if (!newsContent.trim()) return;
-    const { error } = await supabase.from('news').insert({ content: newsContent });
-    if (error) alert('投稿エラー: ' + error.message);
+    const { error } = await supabase.from("news").insert({ content: newsContent });
+    if (error) alert("投稿エラー: " + error.message);
     else {
-      setNewsContent('');
+      setNewsContent("");
       fetchAllData();
     }
   };
   const handleDeleteNews = async (id: number) => {
-    if (!confirm('削除しますか？')) return;
-    await supabase.from('news').delete().eq('id', id);
+    if (!confirm("削除しますか？")) return;
+    await supabase.from("news").delete().eq("id", id);
     fetchAllData();
   };
+
   const handleDeleteEvent = async (id: number) => {
-    if (!confirm('本当に削除しますか？')) return;
-    await supabase.from('events').delete().eq('id', id);
+    if (!confirm("本当に削除しますか？")) return;
+    await supabase.from("events").delete().eq("id", id);
     fetchAllData();
   };
   const handleResetAll = async () => {
-    if (!confirm('【危険】全データ削除しますか？')) return;
-    await supabase.from('assignments').delete().neq('id', 0);
-    await supabase.from('events').delete().neq('id', 0);
-    alert('初期化しました');
+    if (!confirm("【危険】全データ削除しますか？")) return;
+    await supabase.from("assignments").delete().neq("id", 0);
+    await supabase.from("events").delete().neq("id", 0);
+    alert("初期化しました");
     fetchAllData();
   };
+
   const openAttendanceModal = (event: any) => {
     setSelectedEvent(event);
     setIsModalOpen(true);
@@ -195,54 +183,70 @@ export default function AdminPage() {
     setIsModalOpen(false);
   };
 
-  // イベントデータ登録
+  // スケジュール登録（events upsert + assignments insert）
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
-    setStatus('読み込み中...');
+    setStatus("読み込み中...");
+
     const reader = new FileReader();
     reader.onload = async (evt: any) => {
       try {
-        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        const wb = XLSX.read(evt.target.result, { type: "binary" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws, { raw: false });
+
         let evCount = 0;
         let asCount = 0;
 
-        // ヘッダーゆらぎ吸収用関数
         const getVal = (row: any, key: string) => {
           if (row[key] !== undefined) return row[key];
-          const k = Object.keys(row).find((x) => x.replace(/\s+/g, '') === key);
+          const k = Object.keys(row).find((x) => x.replace(/\s+/g, "") === key);
           return k ? row[k] : undefined;
         };
 
         for (const row of data) {
-          const title = getVal(row, 'イベント名');
-          const date = getVal(row, '日付');
-          const time = getVal(row, '集合時間');
-          const place = getVal(row, '集合場所');
-          const program = getVal(row, 'プログラム名');
-          const email = getVal(row, 'メールアドレス');
+          const title = getVal(row, "イベント名");
+          const date = getVal(row, "日付");
+          const time = getVal(row, "集合時間");
+          const endTime = getVal(row, "終了時間"); // ★追加
+          const place = getVal(row, "集合場所");
+          const program = getVal(row, "プログラム名");
+          const email = getVal(row, "メールアドレス");
+
           if (!title || !date) continue;
 
           const { data: eventData, error: evError } = await supabase
-            .from('events')
-            .upsert({ title, date, meeting_time: time, meeting_place: place, program_name: program }, { onConflict: 'title, date' })
+            .from("events")
+            .upsert(
+              {
+                title,
+                date,
+                meeting_time: time,
+                end_time: endTime || null, // ★追加
+                meeting_place: place,
+                program_name: program,
+              },
+              { onConflict: "title, date" }
+            )
             .select()
             .single();
+
           if (evError) throw evError;
           evCount++;
+
           if (eventData && email) {
             const { error: asError } = await supabase
-              .from('assignments')
+              .from("assignments")
               .insert({ student_email: String(email).trim(), event_id: eventData.id });
             if (!asError) asCount++;
           }
         }
+
         setStatus(`完了！ イベント:${evCount}件 / 割り当て:${asCount}件`);
         alert(`登録完了！\nイベント: ${evCount}件\n割り当て: ${asCount}件`);
         fetchAllData();
-        e.target.value = '';
+        e.target.value = "";
       } catch (error: any) {
         setStatus(`エラー: ${error.message}`);
       }
@@ -253,7 +257,6 @@ export default function AdminPage() {
   if (loading) return <div className="p-8">確認中...</div>;
   if (!isAdmin) return null;
 
-  // モーダル用データフィルタ
   const filteredAssignments = selectedEvent ? assignments.filter((a) => a.event_id === selectedEvent.id) : [];
 
   return (
@@ -279,13 +282,11 @@ export default function AdminPage() {
               placeholder="例：【重要】連絡事項"
               className="flex-1 p-3 border rounded shadow-sm"
             />
-            <button
-              type="submit"
-              className="bg-orange-500 text-white px-6 py-2 rounded font-bold hover:bg-orange-600"
-            >
+            <button type="submit" className="bg-orange-500 text-white px-6 py-2 rounded font-bold hover:bg-orange-600">
               投稿
             </button>
           </form>
+
           <div className="mt-4 space-y-2">
             {newsList.map((news) => (
               <div key={news.id} className="flex justify-between items-center bg-orange-50 p-3 rounded">
@@ -298,9 +299,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ---------------------------------------------------- */}
-        {/* ★ ユーザー登録エリア */}
-        {/* ---------------------------------------------------- */}
+        {/* ユーザー登録 */}
         <div className="bg-white p-6 rounded-lg shadow border border-purple-100">
           <h2 className="text-lg font-bold text-purple-800 mb-2">② ユーザーアカウント一括作成</h2>
           <p className="text-sm text-gray-500 mb-4">
@@ -318,7 +317,6 @@ export default function AdminPage() {
             />
           </div>
 
-          {/* アップロード + テンプレDL */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <input
               type="file"
@@ -338,11 +336,13 @@ export default function AdminPage() {
           {userStatus && <p className="mt-2 font-bold text-purple-600">{userStatus}</p>}
         </div>
 
-        {/* スケジュール登録エリア */}
+        {/* スケジュール登録 */}
         <div className="bg-white p-6 rounded-lg shadow border border-blue-100">
           <h2 className="text-lg font-bold text-gray-800 mb-2">① スケジュールデータ登録</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Excelには<strong>「終了時間」</strong>列も追加できます（任意）。未入力の場合はカレンダー出力で「開始＋60分」の暫定になります。
+          </p>
 
-          {/* アップロード + テンプレDL */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <input
               type="file"
@@ -366,10 +366,7 @@ export default function AdminPage() {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">登録済みイベント一覧</h2>
-            <button
-              onClick={handleResetAll}
-              className="bg-red-100 text-red-600 px-4 py-2 rounded font-bold hover:bg-red-200"
-            >
+            <button onClick={handleResetAll} className="bg-red-100 text-red-600 px-4 py-2 rounded font-bold hover:bg-red-200">
               🗑️ 全データ削除
             </button>
           </div>
@@ -449,16 +446,16 @@ export default function AdminPage() {
                         <td className="p-3">
                           <span
                             className={`px-2 py-1 rounded text-xs font-bold border ${
-                              asg.status === '出席'
-                                ? 'bg-green-100 text-green-700 border-green-200'
-                                : asg.status === '欠席'
-                                ? 'bg-red-100 text-red-700 border-red-200'
-                                : asg.status === '参加予定'
-                                ? 'bg-blue-100 text-blue-700 border-blue-200'
-                                : 'bg-gray-100 text-gray-500 border-gray-200'
+                              asg.status === "出席"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : asg.status === "欠席"
+                                ? "bg-red-100 text-red-700 border-red-200"
+                                : asg.status === "参加予定"
+                                ? "bg-blue-100 text-blue-700 border-blue-200"
+                                : "bg-gray-100 text-gray-500 border-gray-200"
                             }`}
                           >
-                            {asg.status || '未登録'}
+                            {asg.status || "未登録"}
                           </span>
                         </td>
                         <td className="p-3">
