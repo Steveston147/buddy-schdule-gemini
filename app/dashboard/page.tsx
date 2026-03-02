@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { useRouter } from 'next/navigation';
 import {
-  format, addMonths, startOfMonth, endOfMonth,
+  format, addMonths, subMonths, startOfMonth, endOfMonth, // subMonths を追加
   startOfWeek, endOfWeek, eachDayOfInterval,
   isSameMonth, isToday, isSameDay, parseISO
 } from 'date-fns';
@@ -13,13 +13,13 @@ import { ja } from 'date-fns/locale';
 
 // --- 型定義 ---
 type ScheduleRow = {
-  id: number; // assignmentのID
+  id: number;
   event_id: number;
-  status: string | null; // 出欠ステータス
+  status: string | null;
   absence_reason: string | null;
   events: {
     title: string | null;
-    date: string | null; // YYYY-MM-DD
+    date: string | null;
     meeting_time: string | null;
     end_time: string | null;
     meeting_place: string | null;
@@ -40,11 +40,13 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [icsMsg, setIcsMsg] = useState<string | null>(null);
 
-  const router = useRouter();
+  // ★ NEW: カレンダーの基準月を管理するState
+  const [baseDate, setBaseDate] = useState(new Date());
+  
+  // baseDate を基準に3ヶ月分を生成
+  const months = [baseDate, addMonths(baseDate, 1), addMonths(baseDate, 2)];
 
-  // カレンダー用の基準月（今月〜3ヶ月分）
-  const today = new Date();
-  const months = [today, addMonths(today, 1), addMonths(today, 2)];
+  const router = useRouter();
 
   // --- データ取得 ---
   useEffect(() => {
@@ -58,7 +60,6 @@ export default function DashboardPage() {
       }
       setUserEmail(user.email);
 
-      // 自分の割当を取得（assignments + events）
       const { data, error } = await supabase
         .from('assignments')
         .select(`
@@ -113,7 +114,6 @@ export default function DashboardPage() {
     if (error) {
       alert('ステータスの更新に失敗しました: ' + error.message);
     } else {
-      // 画面上のデータも更新
       setSchedules(prev => prev.map(s => s.id === assignmentId ? { ...s, status: newStatus } : s));
     }
   };
@@ -123,7 +123,7 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
-  // --- ICSダウンロード処理（既存のまま） ---
+  // --- ICSダウンロード処理 ---
   const handleDownloadIcs = () => {
     setIcsMsg(null);
     if (!userEmail) return setIcsMsg('ユーザー情報が取得できませんでした。');
@@ -158,7 +158,6 @@ export default function DashboardPage() {
       } else {
         const { y, m, d } = ymdToParts(date);
         const startUtc = new Date(Date.UTC(y, m - 1, d, hhmm.hh - 9, hhmm.mm, 0));
-        // DBに終了時間があればそれを使い、無ければ60分後
         let endUtc = new Date(startUtc.getTime() + DEFAULT_DURATION_MIN * 60 * 1000);
         if (ev.end_time) {
           const endHHMM = parseHHMM(ev.end_time);
@@ -194,7 +193,7 @@ export default function DashboardPage() {
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
     return (
-      <div key={monthDate.toString()} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mb-4">
+      <div key={monthDate.toString()} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mb-4 transition-all">
         <div className="text-center font-bold text-gray-700 mb-2">{format(monthStart, "yyyy年 M月", { locale: ja })}</div>
         <div className="grid grid-cols-7 gap-1 text-center text-xs mb-1 text-gray-500">
           {["日", "月", "火", "水", "木", "金", "土"].map((day, idx) => (
@@ -203,7 +202,6 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-sm">
           {days.map((day) => {
-            // 自分が参加するイベントがこの日にあるかチェック
             const dayEvents = sortedSchedules.filter(s => s.events?.date && isSameDay(parseISO(s.events.date), day));
             const isCurrentMonth = isSameMonth(day, monthStart);
             
@@ -229,7 +227,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ヘッダー */}
       <header className="bg-white shadow-sm sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -246,7 +243,6 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* ダウンロードエリア */}
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
           <div>
             <h2 className="font-bold text-blue-900 mb-1">カレンダー連携</h2>
@@ -257,7 +253,6 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* 2カラムレイアウト（左：カレンダー、右：リスト） */}
         <div className="flex flex-col lg:flex-row gap-8">
           
           {/* 左カラム：3ヶ月カレンダー */}
@@ -265,8 +260,33 @@ export default function DashboardPage() {
             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
               <span>📍</span> あなたのスケジュール
             </h3>
+            
             <div className="sticky top-24">
+              {/* ★ NEW: カレンダー操作ボタン */}
+              <div className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm border border-gray-100 mb-4">
+                <button 
+                  onClick={() => setBaseDate(prev => subMonths(prev, 1))} 
+                  className="px-3 py-2 text-sm text-gray-500 hover:bg-blue-50 hover:text-blue-600 rounded transition font-bold"
+                >
+                  ◀ 前月
+                </button>
+                <button 
+                  onClick={() => setBaseDate(new Date())} 
+                  className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded transition font-bold"
+                >
+                  今月に戻る
+                </button>
+                <button 
+                  onClick={() => setBaseDate(prev => addMonths(prev, 1))} 
+                  className="px-3 py-2 text-sm text-gray-500 hover:bg-blue-50 hover:text-blue-600 rounded transition font-bold"
+                >
+                  次月 ▶
+                </button>
+              </div>
+
+              {/* カレンダー本体 */}
               {months.map(month => renderMonth(month))}
+              
               <div className="text-xs text-gray-500 mt-2 flex justify-center gap-4">
                 <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> 出席</span>
                 <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> 欠席</span>
@@ -291,7 +311,6 @@ export default function DashboardPage() {
                   <div key={row.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition group">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                       
-                      {/* イベント情報 */}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded font-bold">
@@ -313,7 +332,6 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* 出欠アクションボタン */}
                       <div className="shrink-0 flex flex-row sm:flex-col gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 sm:border-l border-gray-100 sm:pl-4 mt-4 sm:mt-0">
                         <button 
                           onClick={() => handleStatusUpdate(row.id, '出席')}
