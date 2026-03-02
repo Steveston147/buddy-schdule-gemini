@@ -6,6 +6,12 @@ import { supabase } from "../utils/supabase";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 
+// ★ NEW: ログイン画面と同じ管理者リストを定義します
+const ADMIN_EMAILS = [
+  "eltontanaka@gmail.com",
+  "admin@example.com"
+];
+
 export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -18,7 +24,6 @@ export default function AdminPage() {
   const [newsList, setNewsList] = useState<any[]>([]);
   const [newsContent, setNewsContent] = useState("");
   
-  // ★ NEW: 全ユーザーの氏名とメールアドレスのリストを保持するState
   const [allUsers, setAllUsers] = useState<any[]>([]);
 
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
@@ -38,7 +43,6 @@ export default function AdminPage() {
     setNewsList(news || []);
   }, []);
 
-  // ★ NEW: 作成した専用APIから全ユーザー情報を取得する関数
   const fetchUsersList = useCallback(async () => {
     try {
       const res = await fetch("/api/get-users");
@@ -57,13 +61,15 @@ export default function AdminPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (user && (user.email === "studenta@example.com" || user.email === "eltontanaka@gmail.com")) {
+      // ★ UPDATE: 直書きの studenta@example.com を削除し、管理者リストと照合
+      if (user && ADMIN_EMAILS.includes(user.email || '')) {
         setIsAdmin(true);
         fetchAllData();
-        fetchUsersList(); // ★ 管理者なら全ユーザーリストも裏で取得
+        fetchUsersList(); 
       } else {
-        alert("管理者権限がありません");
-        router.push("/");
+        // ★ 不正アクセス（学生の侵入）を検知した場合は弾き出す
+        alert("【警告】管理者権限がありません。マイページへ移動します。");
+        router.push("/dashboard");
       }
       setLoading(false);
     };
@@ -75,17 +81,11 @@ export default function AdminPage() {
     router.push("/login");
   };
 
-  // ------------------------------------------------------------
-  // メールアドレスから氏名を検索するヘルパー関数
-  // ------------------------------------------------------------
   const getUserName = (email: string) => {
     const found = allUsers.find(u => u.email === email);
     return found && found.name ? found.name : "氏名未登録";
   };
 
-  // ------------------------------------------------------------
-  // テンプレDL（XLSX生成）
-  // ------------------------------------------------------------
   const downloadXlsxTemplate = (
     filename: string,
     sheetName: string,
@@ -120,9 +120,6 @@ export default function AdminPage() {
     downloadXlsxTemplate("schedule_template.xlsx", "schedule", [header, ...sample], [22, 14, 10, 10, 22, 14, 32]);
   };
 
-  // ------------------------------------------------------------
-  // ユーザー一括登録
-  // ------------------------------------------------------------
   const handleUserUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -154,7 +151,7 @@ export default function AdminPage() {
           const errorCount = result.results.filter((r: any) => r.status === "Error").length;
           setUserStatus(`完了！ 成功:${successCount} / エラー(済):${errorCount}`);
           alert(`登録完了\n成功: ${successCount}件\nエラー（登録済など）: ${errorCount}件`);
-          fetchUsersList(); // ★ 登録後、ユーザーリストを最新に更新
+          fetchUsersList(); 
         } else {
           setUserStatus(`エラー: ${result.error}`);
         }
@@ -278,23 +275,18 @@ export default function AdminPage() {
 
   const filteredAssignments = selectedEvent ? assignments.filter((a) => a.event_id === selectedEvent.id) : [];
 
-  // ------------------------------------------------------------
-  // ★ UPDATE: 出席簿のExcelダウンロード処理（氏名を追加）
-  // ------------------------------------------------------------
   const handleDownloadAttendance = () => {
     if (!selectedEvent || filteredAssignments.length === 0) {
       alert("出力するデータがありません。");
       return;
     }
 
-    // エクセルの1行目（氏名を追加）
     const header = ["イベント名", "日付", "氏名", "学生メールアドレス", "ステータス", "備考・欠席理由"];
     
-    // データ行の作成
     const data = filteredAssignments.map((asg) => [
       selectedEvent.title,
       selectedEvent.date,
-      getUserName(asg.student_email), // ★ ここで氏名を検索して挿入！
+      getUserName(asg.student_email), 
       asg.student_email,
       asg.status || "未回答",
       asg.absence_reason || "-"
@@ -302,14 +294,13 @@ export default function AdminPage() {
 
     const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
     
-    // 列幅を見やすく調整（氏名の列を追加したので調整）
     ws["!cols"] = [
-      { wch: 25 }, // イベント名
-      { wch: 15 }, // 日付
-      { wch: 20 }, // 氏名 ★NEW
-      { wch: 35 }, // メールアドレス
-      { wch: 15 }, // ステータス
-      { wch: 40 }, // 理由
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 15 },
+      { wch: 40 },
     ];
 
     const wb = XLSX.utils.book_new();
@@ -509,7 +500,6 @@ export default function AdminPage() {
               <table className="w-full text-sm text-left">
                 <thead className="bg-white border-b text-gray-500 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    {/* ★ UPDATE: モーダルのテーブルヘッダーにも「氏名」を追加 */}
                     <th className="p-4 font-bold">氏名</th>
                     <th className="p-4 font-bold">メールアドレス</th>
                     <th className="p-4 font-bold">ステータス</th>
@@ -526,7 +516,6 @@ export default function AdminPage() {
                   ) : (
                     filteredAssignments.map((asg) => (
                       <tr key={asg.id} className="hover:bg-gray-50 transition">
-                        {/* ★ UPDATE: メールアドレスから氏名を引っ張ってきて表示 */}
                         <td className="p-4 font-bold text-gray-800 text-sm">
                           {getUserName(asg.student_email)}
                         </td>

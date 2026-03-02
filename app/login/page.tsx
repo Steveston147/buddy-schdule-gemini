@@ -1,34 +1,61 @@
+// FILE: app/login/page.tsx
 'use client';
+
 import { useState } from 'react';
-import { supabase } from '../utils/supabase'; // 階層に注意（../utils）
+import { supabase } from '../utils/supabase'; // 階層に注意
 import { useRouter } from 'next/navigation';
+
+// ★ NEW: 管理者（事務局Staff）のメールアドレスをここで一括管理します
+// スタッフが増えたら、ここにカンマ区切りで追加するだけでOKです
+const ADMIN_EMAILS = [
+  "eltontanaka@gmail.com",
+  "admin@example.com"
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState<'student' | 'admin'>('student'); // 'student' か 'admin' で画面を切り替え
+  const [role, setRole] = useState<'student' | 'admin'>('student');
   const router = useRouter();
 
   const handleLogin = async (e: any) => {
     e.preventDefault();
     setLoading(true);
     
-    // メールとパスワードでログイン（裏側の仕組みは共通）
-    const { error } = await supabase.auth.signInWithPassword({
+    // Supabaseで認証チェック
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      alert('ログイン失敗: ' + error.message);
+      alert('ログイン失敗: メールアドレスかパスワードが間違っています。');
       setLoading(false);
-    } else {
-      // ログイン成功後の行き先を変える
-      if (role === 'admin') {
-        router.push('/admin'); // 管理者は管理画面へ
+      return;
+    }
+
+    // ログイン成功後、権限をチェック
+    const loggedInEmail = data.user?.email || '';
+    const isStaff = ADMIN_EMAILS.includes(loggedInEmail);
+
+    if (role === 'admin') {
+      // 「管理者ログイン」タブから入ろうとした場合
+      if (isStaff) {
+        router.push('/admin'); // 権限があれば管理画面へ
       } else {
-        router.push('/dashboard'); // ★ ここを '/' から '/dashboard' に修正しました
+        // ★ 学生が管理者タブから入ろうとした場合はブロックして強制ログアウト
+        alert('【エラー】管理者権限がありません。\n学生用ログインから入り直してください。');
+        await supabase.auth.signOut();
+        setLoading(false);
+      }
+    } else {
+      // 「学生ログイン」タブから入ろうとした場合
+      if (isStaff) {
+        // スタッフが間違えて学生タブから入った場合は、気を利かせて管理画面へ誘導
+        router.push('/admin');
+      } else {
+        router.push('/dashboard'); // 学生はマイページへ
       }
     }
   };
@@ -37,7 +64,6 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         
-        {/* 上部：切り替えタブ */}
         <div className="flex text-center font-bold">
           <button
             onClick={() => setRole('student')}
@@ -61,7 +87,6 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* フォーム部分 */}
         <div className="p-8">
           <h1 className={`text-xl font-bold mb-6 text-center ${role === 'student' ? 'text-blue-600' : 'text-gray-800'}`}>
             {role === 'student' ? 'Buddy Scheduleへようこそ' : '事務局管理画面'}
@@ -105,7 +130,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* 補足メッセージ */}
           <div className="mt-6 text-center text-xs text-gray-400">
             {role === 'student' 
               ? '※ ログインできない場合は事務局にお問い合わせください'
