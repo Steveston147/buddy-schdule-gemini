@@ -43,6 +43,13 @@ export default function DashboardPage() {
   const months = [baseDate, addMonths(baseDate, 1), addMonths(baseDate, 2)];
   const router = useRouter();
 
+  // ★ NEW: パスワード変更モーダル用のState
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState({ type: '', message: '' });
+
   useEffect(() => {
     const fetchSchedules = async () => {
       setLoading(true);
@@ -114,6 +121,51 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/login');
+  };
+
+  // ★ NEW: パスワード変更処理
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // 入力チェック
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'パスワードが一致しません。' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordStatus({ type: 'error', message: 'パスワードは6文字以上で入力してください。' });
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    setPasswordStatus({ type: '', message: '' });
+
+    // Supabaseでパスワードを更新
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      setPasswordStatus({ type: 'error', message: '更新エラー: ' + error.message });
+    } else {
+      setPasswordStatus({ type: 'success', message: 'パスワードを更新しました！' });
+      setNewPassword('');
+      setConfirmPassword('');
+      
+      // 成功したら1.5秒後にモーダルを自動で閉じる
+      setTimeout(() => {
+        setIsPasswordModalOpen(false);
+        setPasswordStatus({ type: '', message: '' });
+      }, 1500);
+    }
+    setIsUpdatingPassword(false);
+  };
+
+  const closePasswordModal = () => {
+    setIsPasswordModalOpen(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordStatus({ type: '', message: '' });
   };
 
   const handleDownloadIcs = () => {
@@ -217,18 +269,26 @@ export default function DashboardPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-500 font-bold">読み込み中...</p></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-20 relative">
       <header className="bg-white shadow-sm sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2 truncate">
             <span>📅</span> Buddy Schedule
           </h1>
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             <span className="text-sm text-gray-600 hidden sm:inline">
               {userName ? `${userName} さん` : userEmail}
             </span>
-            {/* ★ UPDATE: ログアウトボタンをスマホでも押しやすく少し大きく */}
-            <button onClick={handleLogout} className="text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 sm:py-2.5 rounded-full font-bold transition active:scale-95">
+            
+            {/* ★ NEW: 設定（パスワード変更）ボタン */}
+            <button 
+              onClick={() => setIsPasswordModalOpen(true)}
+              className="text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full font-bold transition active:scale-95 flex items-center gap-1"
+            >
+              <span>⚙️</span> <span className="hidden sm:inline">設定</span>
+            </button>
+            
+            <button onClick={handleLogout} className="text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full font-bold transition active:scale-95">
               ログアウト
             </button>
           </div>
@@ -254,7 +314,6 @@ export default function DashboardPage() {
             <h2 className="font-bold text-blue-900 mb-1 text-sm sm:text-base">カレンダー連携</h2>
             <p className="text-xs text-blue-700">スマホのカレンダーアプリに予定を一括追加できます。</p>
           </div>
-          {/* ★ UPDATE: ダウンロードボタンをスマホでは横幅いっぱいに、高さを広げてタップしやすく */}
           <button onClick={handleDownloadIcs} disabled={!sortedSchedules.length} className="w-full sm:w-auto shrink-0 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 sm:py-2.5 px-6 rounded-xl sm:rounded-full shadow-md transition active:scale-95 text-sm sm:text-base">
             📥 .ics をダウンロード
           </button>
@@ -267,10 +326,8 @@ export default function DashboardPage() {
               <span>📍</span> あなたのスケジュール
             </h3>
             
-            {/* ★ UPDATE: lg:sticky lg:top-24 を適用。PCでは追従、スマホではスクロールする */}
             <div className="lg:sticky lg:top-24">
               <div className="flex items-center justify-between bg-white p-2 sm:p-3 rounded-xl shadow-sm border border-gray-100 mb-4">
-                {/* ★ UPDATE: カレンダー操作ボタンもスマホで押しやすいサイズ（py-3）に */}
                 <button 
                   onClick={() => setBaseDate(prev => subMonths(prev, 1))} 
                   className="px-3 sm:px-4 py-3 sm:py-2 text-sm text-gray-500 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition font-bold active:bg-blue-100"
@@ -337,7 +394,6 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* ★ UPDATE: スマホではボタンの高さを広げ（py-3）、PCでは元サイズ（sm:py-2）に。角丸も大きく（rounded-xl） */}
                       <div className="shrink-0 flex flex-row sm:flex-col gap-3 pt-4 sm:pt-0 border-t sm:border-t-0 sm:border-l border-gray-100 sm:pl-5 mt-2 sm:mt-0">
                         <button 
                           onClick={() => handleStatusUpdate(row.id, '出席')}
@@ -370,6 +426,63 @@ export default function DashboardPage() {
 
         </div>
       </div>
+
+      {/* ★ NEW: パスワード変更モーダル */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm" onClick={closePasswordModal}>
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <span>🔒</span> パスワード変更
+                </h3>
+                <button onClick={closePasswordModal} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              </div>
+              
+              <form onSubmit={handlePasswordUpdate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">新しいパスワード</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="6文字以上で入力"
+                    className="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">新しいパスワード（確認用）</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="もう一度入力してください"
+                    className="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                {passwordStatus.message && (
+                  <div className={`p-3 rounded-xl text-sm font-bold ${passwordStatus.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                    {passwordStatus.message}
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingPassword}
+                    className="w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 rounded-xl shadow-md transition active:scale-95 disabled:opacity-50"
+                  >
+                    {isUpdatingPassword ? '更新中...' : 'パスワードを更新する'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
