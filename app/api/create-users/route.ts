@@ -1,3 +1,4 @@
+// FILE: app/api/create-users/route.ts
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
     // マスターキーを使って管理者権限でSupabaseに接続
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!, // ここで裏鍵を使います
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,
@@ -27,15 +28,19 @@ export async function POST(request: Request) {
     // ループして一人ずつ登録
     for (const user of users) {
       const email = user['メールアドレス'] || user['Email'] || user['email'];
-      
       if (!email) continue;
+
+      const name = user['氏名'] || '';
 
       // ユーザーを作成（すでに存在する場合はエラーになるが、それは無視してOK）
       const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email: String(email).trim(),
         password: defaultPassword, // 管理者が決めた初期パスワード
         email_confirm: true, // メール確認をスキップして即ログイン可能にする
-        user_metadata: { name: user['氏名'] || '' }
+        user_metadata: { 
+          name: name, 
+          full_name: name // Supabaseのダッシュボード(Display name)に表示させるため追加
+        }
       });
 
       if (error) {

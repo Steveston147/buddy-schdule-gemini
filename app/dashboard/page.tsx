@@ -5,13 +5,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { useRouter } from 'next/navigation';
 import {
-  format, addMonths, subMonths, startOfMonth, endOfMonth, // subMonths を追加
+  format, addMonths, subMonths, startOfMonth, endOfMonth,
   startOfWeek, endOfWeek, eachDayOfInterval,
   isSameMonth, isToday, isSameDay, parseISO
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-// --- 型定義 ---
 type ScheduleRow = {
   id: number;
   event_id: number;
@@ -27,7 +26,6 @@ type ScheduleRow = {
   } | null;
 };
 
-// --- ICS生成用ヘルパー関数 ---
 function pad2(n: number) { return String(n).padStart(2, '0'); }
 function icsEscape(s: string) { return s.replace(/\\/g, '\\\\').replace(/\r\n|\n|\r/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;'); }
 function ymdToParts(ymd: string) { const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10)); return { y, m, d }; }
@@ -37,18 +35,14 @@ function toIcsUtcStamp(dt: Date) { return dt.getUTCFullYear() + pad2(dt.getUTCMo
 export default function DashboardPage() {
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState(''); // ★ NEW: 氏名を管理するState
   const [loading, setLoading] = useState(true);
   const [icsMsg, setIcsMsg] = useState<string | null>(null);
 
-  // ★ NEW: カレンダーの基準月を管理するState
   const [baseDate, setBaseDate] = useState(new Date());
-  
-  // baseDate を基準に3ヶ月分を生成
   const months = [baseDate, addMonths(baseDate, 1), addMonths(baseDate, 2)];
-
   const router = useRouter();
 
-  // --- データ取得 ---
   useEffect(() => {
     const fetchSchedules = async () => {
       setLoading(true);
@@ -59,6 +53,9 @@ export default function DashboardPage() {
         return;
       }
       setUserEmail(user.email);
+      
+      // ★ NEW: メタデータから氏名を取得（未登録なら空文字）
+      setUserName(user.user_metadata?.name || user.user_metadata?.full_name || '');
 
       const { data, error } = await supabase
         .from('assignments')
@@ -90,7 +87,6 @@ export default function DashboardPage() {
     fetchSchedules();
   }, [router]);
 
-  // 日付順にソート
   const sortedSchedules = useMemo(() => {
     const copy = [...schedules];
     copy.sort((a, b) => {
@@ -104,7 +100,6 @@ export default function DashboardPage() {
     return copy;
   }, [schedules]);
 
-  // --- 出欠ステータス更新 ---
   const handleStatusUpdate = async (assignmentId: number, newStatus: string) => {
     const { error } = await supabase
       .from('assignments')
@@ -123,7 +118,6 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
-  // --- ICSダウンロード処理 ---
   const handleDownloadIcs = () => {
     setIcsMsg(null);
     if (!userEmail) return setIcsMsg('ユーザー情報が取得できませんでした。');
@@ -185,7 +179,6 @@ export default function DashboardPage() {
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   };
 
-  // --- カレンダー描画用コンポーネント ---
   const renderMonth = (monthDate: Date) => {
     const monthStart = startOfMonth(monthDate);
     const startDate = startOfWeek(monthStart, { weekStartsOn: 0 });
@@ -233,7 +226,10 @@ export default function DashboardPage() {
             <span>📅</span> Buddy Schedule
           </h1>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 hidden sm:inline">{userEmail}</span>
+            {/* ヘッダーにも名前を表示 */}
+            <span className="text-sm text-gray-600 hidden sm:inline">
+              {userName ? `${userName} さん` : userEmail}
+            </span>
             <button onClick={handleLogout} className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-full font-bold transition">
               ログアウト
             </button>
@@ -243,6 +239,19 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         
+        {/* ★ NEW: 個人を強く認識させるウェルカムボード */}
+        <div className="mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5">
+          <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-bold">
+            {userName ? userName.charAt(0) : '👤'}
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">
+              ようこそ、<span className="text-blue-600">{userName || 'ゲスト'}</span> さん
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">{userEmail}</p>
+          </div>
+        </div>
+
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
           <div>
             <h2 className="font-bold text-blue-900 mb-1">カレンダー連携</h2>
@@ -255,14 +264,12 @@ export default function DashboardPage() {
 
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* 左カラム：3ヶ月カレンダー */}
           <div className="w-full lg:w-1/3 shrink-0">
             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
               <span>📍</span> あなたのスケジュール
             </h3>
             
             <div className="sticky top-24">
-              {/* ★ NEW: カレンダー操作ボタン */}
               <div className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm border border-gray-100 mb-4">
                 <button 
                   onClick={() => setBaseDate(prev => subMonths(prev, 1))} 
@@ -284,7 +291,6 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* カレンダー本体 */}
               {months.map(month => renderMonth(month))}
               
               <div className="text-xs text-gray-500 mt-2 flex justify-center gap-4">
@@ -295,7 +301,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 右カラム：イベント詳細リスト */}
           <div className="w-full lg:w-2/3">
             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
               <span>📋</span> 詳細と出欠確認
