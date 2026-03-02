@@ -38,12 +38,14 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
   const [icsMsg, setIcsMsg] = useState<string | null>(null);
+  
+  // ★ NEW: お知らせデータを保持するState
+  const [newsList, setNewsList] = useState<any[]>([]);
 
   const [baseDate, setBaseDate] = useState(new Date());
   const months = [baseDate, addMonths(baseDate, 1), addMonths(baseDate, 2)];
   const router = useRouter();
 
-  // ★ NEW: パスワード変更モーダル用のState
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -51,7 +53,7 @@ export default function DashboardPage() {
   const [passwordStatus, setPasswordStatus] = useState({ type: '', message: '' });
 
   useEffect(() => {
-    const fetchSchedules = async () => {
+    const fetchData = async () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -62,7 +64,8 @@ export default function DashboardPage() {
       setUserEmail(user.email);
       setUserName(user.user_metadata?.name || user.user_metadata?.full_name || '');
 
-      const { data, error } = await supabase
+      // スケジュールの取得
+      const { data: asgData, error: asgError } = await supabase
         .from('assignments')
         .select(`
           id,
@@ -80,16 +83,27 @@ export default function DashboardPage() {
         `)
         .eq('student_email', user.email);
 
-      if (error) {
-        console.error('データ取得エラー:', error);
+      if (asgError) {
+        console.error('スケジュール取得エラー:', asgError);
         setSchedules([]);
       } else {
-        setSchedules((data as any) || []);
+        setSchedules((asgData as any) || []);
       }
+
+      // ★ NEW: お知らせの取得
+      const { data: newsData, error: newsError } = await supabase
+        .from('news')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!newsError && newsData) {
+        setNewsList(newsData);
+      }
+
       setLoading(false);
     };
 
-    fetchSchedules();
+    fetchData();
   }, [router]);
 
   const sortedSchedules = useMemo(() => {
@@ -123,11 +137,8 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
-  // ★ NEW: パスワード変更処理
   const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 入力チェック
     if (newPassword !== confirmPassword) {
       setPasswordStatus({ type: 'error', message: 'パスワードが一致しません。' });
       return;
@@ -140,7 +151,6 @@ export default function DashboardPage() {
     setIsUpdatingPassword(true);
     setPasswordStatus({ type: '', message: '' });
 
-    // Supabaseでパスワードを更新
     const { error } = await supabase.auth.updateUser({
       password: newPassword
     });
@@ -151,8 +161,6 @@ export default function DashboardPage() {
       setPasswordStatus({ type: 'success', message: 'パスワードを更新しました！' });
       setNewPassword('');
       setConfirmPassword('');
-      
-      // 成功したら1.5秒後にモーダルを自動で閉じる
       setTimeout(() => {
         setIsPasswordModalOpen(false);
         setPasswordStatus({ type: '', message: '' });
@@ -279,15 +287,12 @@ export default function DashboardPage() {
             <span className="text-sm text-gray-600 hidden sm:inline">
               {userName ? `${userName} さん` : userEmail}
             </span>
-            
-            {/* ★ NEW: 設定（パスワード変更）ボタン */}
             <button 
               onClick={() => setIsPasswordModalOpen(true)}
               className="text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full font-bold transition active:scale-95 flex items-center gap-1"
             >
               <span>⚙️</span> <span className="hidden sm:inline">設定</span>
             </button>
-            
             <button onClick={handleLogout} className="text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full font-bold transition active:scale-95">
               ログアウト
             </button>
@@ -297,6 +302,7 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
         
+        {/* ウェルカムボード */}
         <div className="mb-6 sm:mb-8 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 sm:gap-5">
           <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl sm:text-2xl font-bold shrink-0">
             {userName ? userName.charAt(0) : '👤'}
@@ -309,6 +315,26 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ★ NEW: お知らせセクション（お知らせがある場合のみ表示） */}
+        {newsList.length > 0 && (
+          <div className="mb-6 sm:mb-8 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border-t-4 border-orange-400">
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <span>📢</span> 事務局からのお知らせ
+            </h2>
+            <ul className="space-y-3">
+              {newsList.map((news) => (
+                <li key={news.id} className="text-sm text-gray-800 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 bg-orange-50 p-3 sm:p-4 rounded-xl border border-orange-100">
+                  <span className="text-orange-600 font-bold shrink-0">
+                    {format(new Date(news.created_at), "yyyy/MM/dd")}
+                  </span>
+                  <span className="font-medium">{news.content}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* カレンダー連携 */}
         <div className="bg-blue-50 border border-blue-100 p-4 sm:p-5 rounded-2xl mb-6 sm:mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
           <div className="text-center sm:text-left w-full sm:w-auto">
             <h2 className="font-bold text-blue-900 mb-1 text-sm sm:text-base">カレンダー連携</h2>
@@ -319,6 +345,7 @@ export default function DashboardPage() {
           </button>
         </div>
 
+        {/* 2カラム構成 */}
         <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
           
           <div className="w-full lg:w-1/3 shrink-0">
@@ -427,7 +454,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ★ NEW: パスワード変更モーダル */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm" onClick={closePasswordModal}>
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
