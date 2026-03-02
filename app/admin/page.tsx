@@ -6,7 +6,7 @@ import { supabase } from "../utils/supabase";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 
-// ★ NEW: ログイン画面と同じ管理者リストを定義します
+// 管理者リスト
 const ADMIN_EMAILS = [
   "eltontanaka@gmail.com",
   "admin@example.com"
@@ -61,13 +61,11 @@ export default function AdminPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // ★ UPDATE: 直書きの studenta@example.com を削除し、管理者リストと照合
       if (user && ADMIN_EMAILS.includes(user.email || '')) {
         setIsAdmin(true);
         fetchAllData();
         fetchUsersList(); 
       } else {
-        // ★ 不正アクセス（学生の侵入）を検知した場合は弾き出す
         alert("【警告】管理者権限がありません。マイページへ移動します。");
         router.push("/dashboard");
       }
@@ -194,6 +192,9 @@ export default function AdminPage() {
     fetchAllData();
   };
 
+  // ------------------------------------------------------------
+  // ★ UPDATE: スケジュール登録処理の大改修（集合時間での区別）
+  // ------------------------------------------------------------
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -226,39 +227,69 @@ export default function AdminPage() {
 
           if (!title || !date) continue;
 
-          const { data: eventData, error: evError } = await supabase
+          // 1. タイトル、日付、集合時間の3つで「既存のイベントか」を検索
+          let query = supabase
             .from("events")
-            .upsert(
-              {
+            .select()
+            .eq("title", title)
+            .eq("date", date);
+          
+          if (time) {
+            query = query.eq("meeting_time", time);
+          } else {
+            query = query.is("meeting_time", null);
+          }
+
+          let { data: eventData, error: fetchError } = await query.maybeSingle();
+
+          // 2. なければ新規登録としてデータベースに作成
+          if (!eventData) {
+            const { data: newEvent, error: insertError } = await supabase
+              .from("events")
+              .insert({
                 title,
                 date,
-                meeting_time: time,
+                meeting_time: time || null,
                 end_time: endTime || null,
                 meeting_place: place,
                 program_name: program,
-              },
-              { onConflict: "title, date" }
-            )
-            .select()
-            .single();
+              })
+              .select()
+              .single();
 
-          if (evError) throw evError;
-          evCount++;
+            if (insertError) throw insertError;
+            eventData = newEvent;
+            evCount++; // 新規作成したイベント数
+          }
 
+          // 3. 学生の割り当て（重複チェック付き）
           if (eventData && email) {
-            const { error: asError } = await supabase
+            const studentEmail = String(email).trim();
+            
+            // すでにこの学生がこのイベントに割り当てられているか確認
+            const { data: existingAsg } = await supabase
               .from("assignments")
-              .insert({ student_email: String(email).trim(), event_id: eventData.id });
-            if (!asError) asCount++;
+              .select("id")
+              .eq("student_email", studentEmail)
+              .eq("event_id", eventData.id)
+              .maybeSingle();
+
+            if (!existingAsg) {
+              const { error: asError } = await supabase
+                .from("assignments")
+                .insert({ student_email: studentEmail, event_id: eventData.id });
+              if (!asError) asCount++; // 新規割り当て数
+            }
           }
         }
 
-        setStatus(`完了！ イベント:${evCount}件 / 割り当て:${asCount}件`);
-        alert(`登録完了！\nイベント: ${evCount}件\n割り当て: ${asCount}件`);
+        setStatus(`完了！ 新規イベント:${evCount}件 / 新規割り当て:${asCount}件`);
+        alert(`処理完了！\n・新しく作成されたイベント: ${evCount}件\n・新しく割り当てた学生数: ${asCount}件\n（すでに登録済みのデータはスキップされました）`);
         fetchAllData();
         e.target.value = "";
       } catch (error: any) {
         setStatus(`エラー: ${error.message}`);
+        console.error(error);
       }
     };
     reader.readAsBinaryString(file);
@@ -430,6 +461,7 @@ export default function AdminPage() {
                 <tr>
                   <th className="p-3 border-b rounded-tl-lg">日付</th>
                   <th className="p-3 border-b">イベント名</th>
+                  <th className="p-3 border-b">集合時間</th>
                   <th className="p-3 border-b">PG</th>
                   <th className="p-3 border-b text-center">出席簿</th>
                   <th className="p-3 border-b text-center rounded-tr-lg">削除</th>
@@ -440,6 +472,7 @@ export default function AdminPage() {
                   <tr key={e.id} className="hover:bg-gray-50 transition">
                     <td className="p-3 text-gray-600">{e.date}</td>
                     <td className="p-3 font-bold text-gray-800">{e.title}</td>
+                    <td className="p-3 text-gray-600">{e.meeting_time || '-'}</td>
                     <td className="p-3">
                       <span className="bg-gray-200 px-2 py-1 rounded text-xs font-bold text-gray-700">{e.program_name || '-'}</span>
                     </td>
@@ -460,7 +493,7 @@ export default function AdminPage() {
                 ))}
                 {events.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-gray-400">
+                    <td colSpan={6} className="p-8 text-center text-gray-400">
                       登録されているイベントはありません
                     </td>
                   </tr>
@@ -479,7 +512,7 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-xl font-bold mb-1">{selectedEvent.title}</h3>
                 <p className="text-sm text-blue-100 flex items-center gap-2">
-                  <span>🗓️ {selectedEvent.date}</span>
+                  <span>🗓️ {selectedEvent.date} {selectedEvent.meeting_time}集合</span>
                   <span>📍 {selectedEvent.meeting_place || '場所未定'}</span>
                 </p>
               </div>
