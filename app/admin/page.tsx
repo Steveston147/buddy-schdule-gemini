@@ -1,5 +1,4 @@
 // FILE: app/admin/page.tsx
-// PATH: /app/admin/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -13,10 +12,14 @@ export default function AdminPage() {
   const [status, setStatus] = useState("");
   const [userStatus, setUserStatus] = useState("");
   const [defaultPassword, setDefaultPassword] = useState("Welcome2026");
+  
   const [events, setEvents] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [newsList, setNewsList] = useState<any[]>([]);
   const [newsContent, setNewsContent] = useState("");
+  
+  // ★ NEW: 全ユーザーの氏名とメールアドレスのリストを保持するState
+  const [allUsers, setAllUsers] = useState<any[]>([]);
 
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,16 +38,29 @@ export default function AdminPage() {
     setNewsList(news || []);
   }, []);
 
+  // ★ NEW: 作成した専用APIから全ユーザー情報を取得する関数
+  const fetchUsersList = useCallback(async () => {
+    try {
+      const res = await fetch("/api/get-users");
+      if (res.ok) {
+        const data = await res.json();
+        setAllUsers(data.users || []);
+      }
+    } catch (err) {
+      console.error("ユーザー取得エラー", err);
+    }
+  }, []);
+
   useEffect(() => {
     const checkUser = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // 管理者権限のチェック
       if (user && (user.email === "studenta@example.com" || user.email === "eltontanaka@gmail.com")) {
         setIsAdmin(true);
         fetchAllData();
+        fetchUsersList(); // ★ 管理者なら全ユーザーリストも裏で取得
       } else {
         alert("管理者権限がありません");
         router.push("/");
@@ -52,11 +68,19 @@ export default function AdminPage() {
       setLoading(false);
     };
     checkUser();
-  }, [router, fetchAllData]);
+  }, [router, fetchAllData, fetchUsersList]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
+  };
+
+  // ------------------------------------------------------------
+  // メールアドレスから氏名を検索するヘルパー関数
+  // ------------------------------------------------------------
+  const getUserName = (email: string) => {
+    const found = allUsers.find(u => u.email === email);
+    return found && found.name ? found.name : "氏名未登録";
   };
 
   // ------------------------------------------------------------
@@ -130,6 +154,7 @@ export default function AdminPage() {
           const errorCount = result.results.filter((r: any) => r.status === "Error").length;
           setUserStatus(`完了！ 成功:${successCount} / エラー(済):${errorCount}`);
           alert(`登録完了\n成功: ${successCount}件\nエラー（登録済など）: ${errorCount}件`);
+          fetchUsersList(); // ★ 登録後、ユーザーリストを最新に更新
         } else {
           setUserStatus(`エラー: ${result.error}`);
         }
@@ -141,9 +166,6 @@ export default function AdminPage() {
     reader.readAsBinaryString(file);
   };
 
-  // ------------------------------------------------------------
-  // お知らせ管理
-  // ------------------------------------------------------------
   const handleAddNews = async (e: any) => {
     e.preventDefault();
     if (!newsContent.trim()) return;
@@ -154,15 +176,13 @@ export default function AdminPage() {
       fetchAllData();
     }
   };
+  
   const handleDeleteNews = async (id: number) => {
     if (!confirm("削除しますか？")) return;
     await supabase.from("news").delete().eq("id", id);
     fetchAllData();
   };
 
-  // ------------------------------------------------------------
-  // イベント管理
-  // ------------------------------------------------------------
   const handleDeleteEvent = async (id: number) => {
     if (!confirm("本当に削除しますか？関連する出欠データも消えます。")) return;
     await supabase.from("events").delete().eq("id", id);
@@ -177,9 +197,6 @@ export default function AdminPage() {
     fetchAllData();
   };
 
-  // ------------------------------------------------------------
-  // スケジュール登録
-  // ------------------------------------------------------------
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -250,9 +267,6 @@ export default function AdminPage() {
     reader.readAsBinaryString(file);
   };
 
-  // ------------------------------------------------------------
-  // 出席簿モーダル＆Excel出力機能
-  // ------------------------------------------------------------
   const openAttendanceModal = (event: any) => {
     setSelectedEvent(event);
     setIsModalOpen(true);
@@ -264,51 +278,49 @@ export default function AdminPage() {
 
   const filteredAssignments = selectedEvent ? assignments.filter((a) => a.event_id === selectedEvent.id) : [];
 
-  // ★ NEW: 出席簿のExcelダウンロード処理
+  // ------------------------------------------------------------
+  // ★ UPDATE: 出席簿のExcelダウンロード処理（氏名を追加）
+  // ------------------------------------------------------------
   const handleDownloadAttendance = () => {
     if (!selectedEvent || filteredAssignments.length === 0) {
       alert("出力するデータがありません。");
       return;
     }
 
-    // エクセルの1行目（ヘッダー）
-    const header = ["イベント名", "日付", "学生メールアドレス", "ステータス", "備考・欠席理由"];
+    // エクセルの1行目（氏名を追加）
+    const header = ["イベント名", "日付", "氏名", "学生メールアドレス", "ステータス", "備考・欠席理由"];
     
     // データ行の作成
     const data = filteredAssignments.map((asg) => [
       selectedEvent.title,
       selectedEvent.date,
+      getUserName(asg.student_email), // ★ ここで氏名を検索して挿入！
       asg.student_email,
       asg.status || "未回答",
       asg.absence_reason || "-"
     ]);
 
-    // シートの作成
     const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
     
-    // 列幅を見やすく調整
+    // 列幅を見やすく調整（氏名の列を追加したので調整）
     ws["!cols"] = [
       { wch: 25 }, // イベント名
       { wch: 15 }, // 日付
+      { wch: 20 }, // 氏名 ★NEW
       { wch: 35 }, // メールアドレス
       { wch: 15 }, // ステータス
       { wch: 40 }, // 理由
     ];
 
-    // ブックを作成して保存
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "出席状況");
 
-    // ファイル名（例：日本語講座_2026-02-10_出席簿.xlsx）
-    const safeTitle = selectedEvent.title.replace(/[\\/:*?"<>|]/g, "_"); // 記号をアンダーバーに変換
+    const safeTitle = selectedEvent.title.replace(/[\\/:*?"<>|]/g, "_");
     const filename = `${safeTitle}_${selectedEvent.date}_出席簿.xlsx`;
 
     XLSX.writeFile(wb, filename);
   };
 
-  // ------------------------------------------------------------
-  // レンダリング
-  // ------------------------------------------------------------
   if (loading) return <div className="p-8">確認中...</div>;
   if (!isAdmin) return null;
 
@@ -316,7 +328,6 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50 p-6 relative">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* ヘッダー */}
         <div className="flex justify-between items-center bg-white p-4 rounded shadow border-l-4 border-blue-600">
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
             <span>⚙️</span> 事務局・管理者ダッシュボード
@@ -329,7 +340,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* お知らせ */}
         <div className="bg-white p-6 rounded-lg shadow border-t-4 border-orange-400">
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
             <span>📢</span> お知らせ・緊急連絡の投稿
@@ -358,7 +368,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* ユーザー一括登録 */}
         <div className="bg-white p-6 rounded-lg shadow border border-purple-100">
           <h2 className="text-lg font-bold text-purple-800 mb-2">② ユーザーアカウント一括作成</h2>
           <p className="text-sm text-gray-500 mb-4">
@@ -392,7 +401,6 @@ export default function AdminPage() {
           {userStatus && <p className="mt-3 font-bold text-purple-600 bg-purple-50 p-2 rounded inline-block">{userStatus}</p>}
         </div>
 
-        {/* スケジュール登録 */}
         <div className="bg-white p-6 rounded-lg shadow border border-blue-100">
           <h2 className="text-lg font-bold text-blue-800 mb-2">① スケジュールデータ登録</h2>
           <p className="text-sm text-gray-500 mb-4">
@@ -416,7 +424,6 @@ export default function AdminPage() {
           {status && <p className="mt-3 font-bold text-blue-600 bg-blue-50 p-2 rounded inline-block">{status}</p>}
         </div>
 
-        {/* イベント一覧 */}
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold flex items-center gap-2">
@@ -473,12 +480,10 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* 出席簿モーダル */}
       {isModalOpen && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm" onClick={closeAttendanceModal}>
-          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             
-            {/* モーダルヘッダー */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-5 text-white flex justify-between items-center shrink-0">
               <div>
                 <h3 className="text-xl font-bold mb-1">{selectedEvent.title}</h3>
@@ -488,7 +493,6 @@ export default function AdminPage() {
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                {/* ★ NEW: ダウンロードボタン */}
                 <button
                   onClick={handleDownloadAttendance}
                   className="bg-white text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-full text-sm font-bold shadow-md transition flex items-center gap-2 active:scale-95"
@@ -501,12 +505,13 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* モーダルコンテンツ（名簿一覧） */}
             <div className="p-0 overflow-y-auto flex-1 bg-gray-50">
               <table className="w-full text-sm text-left">
                 <thead className="bg-white border-b text-gray-500 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    <th className="p-4 font-bold">学生メールアドレス</th>
+                    {/* ★ UPDATE: モーダルのテーブルヘッダーにも「氏名」を追加 */}
+                    <th className="p-4 font-bold">氏名</th>
+                    <th className="p-4 font-bold">メールアドレス</th>
                     <th className="p-4 font-bold">ステータス</th>
                     <th className="p-4 font-bold">備考・欠席理由</th>
                   </tr>
@@ -514,14 +519,18 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {filteredAssignments.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="p-10 text-center text-gray-400">
+                      <td colSpan={4} className="p-10 text-center text-gray-400">
                         このイベントに参加予定の学生はいません
                       </td>
                     </tr>
                   ) : (
                     filteredAssignments.map((asg) => (
                       <tr key={asg.id} className="hover:bg-gray-50 transition">
-                        <td className="p-4 font-mono text-gray-700 text-xs sm:text-sm">{asg.student_email}</td>
+                        {/* ★ UPDATE: メールアドレスから氏名を引っ張ってきて表示 */}
+                        <td className="p-4 font-bold text-gray-800 text-sm">
+                          {getUserName(asg.student_email)}
+                        </td>
+                        <td className="p-4 font-mono text-gray-600 text-xs sm:text-sm">{asg.student_email}</td>
                         <td className="p-4">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-bold border ${
@@ -549,7 +558,6 @@ export default function AdminPage() {
               </table>
             </div>
 
-            {/* モーダルフッター */}
             <div className="bg-white p-4 text-right border-t border-gray-100 shrink-0 flex justify-between items-center">
               <p className="text-xs text-gray-400">
                 該当人数: {filteredAssignments.length} 名
