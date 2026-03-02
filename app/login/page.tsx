@@ -28,7 +28,7 @@ export default function LoginPage() {
       if (role === 'admin') {
         router.push('/admin'); // 管理者は管理画面へ
       } else {
-        router.push('/');      // 学生はトップページ（スケジュール）へ
+        router.push('/dashboard'); // ★ ここを '/' から '/dashboard' に修正しました
       }
     }
   };
